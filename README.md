@@ -135,14 +135,19 @@ git clone https://github.com/pytorch/vision -b ${version} --depth 1
 cd vision && python setup.py install
 ```
 the `version` depends on torch version, for example you have torch v2.5.0, `${version}` should be `0.20.0`.
+If the build fails due to errors on no NVCC, CUDA, etc. found, it can likely be fixed by adding this line to the top of setup.py:
+```python
+import torch_musa
+```
 
 ### torchaudio
 Install torchaudio from [torch source](https://github.com/pytorch/audio):
 ```shell
-git clone https://github.com/pytorch/audio.git -b ${version} --depth 1
+git clone https://github.com/pytorch/audio.git -b release/${version} --depth 1
 cd audio && python setup.py install
 ```
 the `version` is same as the torch version.
+Similar to torchvision, there is the possiblity that ```import torch_musa``` has to be added to the start of setup.py to use it. 
 
 ### Other Repositories
 Many repositories have supported MUSA backend upstream,
