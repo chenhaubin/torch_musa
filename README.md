@@ -123,7 +123,7 @@ USE_MCCL=0 bash build.sh -c
 ## MUSA Supported Repositories
 
 ### torchvision
-For torch_musa v2.7.0 and later, install torchvision from [our repository](https://gitub.com/MooreThreads/vision):
+For torch_musa v2.7.0 and later, install torchvision from [our repository](https://github.com/MooreThreads/vision):
 ```shell
 git clone https://github.com/MooreThreads/vision -b v0.22.1-musa --depth 1
 cd vision && python setup.py install
