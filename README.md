@@ -1,6 +1,8 @@
 ![Torch MUSA_Logo](docs/pdf/images/torch_musa.png)
 --------------------------------------------------------------------------------
 
+> **Language**: English | [中文](README_zh.md)
+
 <!-- toc -->
 
 - [Overview](#overview)
