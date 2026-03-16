@@ -1,0 +1,20 @@
+diff --git a/torch/csrc/utils/tensor_types.h b/torch/csrc/utils/tensor_types.h
+index a4b9056..56791eb 100644
+--- a/torch/csrc/utils/tensor_types.h
++++ b/torch/csrc/utils/tensor_types.h
+@@ -2,6 +2,7 @@
+ 
+ #include <ATen/core/DeprecatedTypeProperties.h>
+ #include <c10/core/TensorOptions.h>
++#include <torch/csrc/Export.h>
+ #include <utility>
+ #include <vector>
+ 
+@@ -15,6 +16,6 @@ at::TensorOptions options_from_string(const std::string& str);
+ std::vector<std::pair<at::Backend, at::ScalarType>> all_declared_types();
+ 
+ // return python module name of backend, like torch.cuda, torch.foo
+-const char* backend_to_string(const at::Backend& backend);
++TORCH_PYTHON_API const char* backend_to_string(const at::Backend& backend);
+ 
+ } // namespace torch::utils

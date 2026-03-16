@@ -1,7 +1,7 @@
 # pylint: disable=C0116
 
 """Implement MUSATritonWrapperCodeGen"""
-# pylint: disable=C0116
+# pylint: disable=C0116,W0221
 
 import dataclasses
 from typing import Optional

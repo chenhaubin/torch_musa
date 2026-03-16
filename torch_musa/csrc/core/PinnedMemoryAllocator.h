@@ -5,8 +5,8 @@
 
 namespace at::musa {
 
-inline at::Allocator* getPinnedMemoryAllocator() {
-  return getCachingHostAllocator();
+inline at::HostAllocator* getPinnedMemoryAllocator() {
+  return at::getHostAllocator(at::kMUSA);
 }
 
 } // namespace at::musa

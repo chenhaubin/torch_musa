@@ -5,13 +5,15 @@ import copy
 import functools
 import unittest
 import pytest
+import tempfile
 
 import torch
 from torch._inductor import config
+from torch._inductor.package import load_package
 from torch._inductor.test_case import TestCase
 from torch.testing._internal import common_utils
 
-from torch_musa._inductor.package import load_package
+# from torch_musa._inductor.package import load_package
 import torch_musa
 from torch_musa.testing.base_test_tool import _HAS_TRITON
 
@@ -46,17 +48,20 @@ def copy_tests(
             setattr(other_cls, f"{name}_{suffix}", new_test)
 
 
-def compile(model, example_inputs, dynamic_shapes, options, device):
+def compile(
+    model, example_inputs, dynamic_shapes, inductor_configs=None, package_path=None
+):
     ep = torch.export.export(
         model,
         example_inputs,
         dynamic_shapes=dynamic_shapes,
         strict=False,
     )
-    gm = ep.module()
-    package_path = torch._inductor.aot_compile(gm, example_inputs, options=options)
-    compiled_model = load_package(package_path, device)
-    return compiled_model
+    package_path = torch._inductor.aoti_compile_and_package(
+        ep, package_path=package_path, inductor_configs=inductor_configs
+    )  # type: ignore[arg-type]
+    loaded = load_package(package_path)
+    return loaded
 
 
 def check_model(
@@ -69,12 +74,11 @@ def check_model(
     atol=None,
     rtol=None,
 ):
-    with torch.no_grad(), config.patch(
-        {
-            "aot_inductor.package": True,
-            # TODO: "aot_inductor.force_mmap_weights": True,
-        }
-    ):
+    inductor_configs = {
+        "aot_inductor.package": True,
+        # TODO: "aot_inductor.force_mmap_weights": True,
+    }
+    with torch.no_grad():
         torch.manual_seed(0)
         model = model.to(self.device)
         ref_model = copy.deepcopy(model)
@@ -82,13 +86,14 @@ def check_model(
         expected = ref_model(*ref_inputs)
 
         torch.manual_seed(0)
-        compiled_model = compile(
-            model,
-            example_inputs,
-            dynamic_shapes,
-            options,
-            self.device,
-        )
+        with tempfile.NamedTemporaryFile(suffix=".pt2") as f:
+            compiled_model = compile(
+                model,
+                example_inputs,
+                dynamic_shapes,
+                inductor_configs=inductor_configs,
+                package_path=f.name,
+            )
 
         actual = compiled_model(*example_inputs)
 

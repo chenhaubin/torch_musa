@@ -199,20 +199,20 @@ void handle_fused_mode(
     int64_t slice_size,
     int64_t slices) {
   constexpr int num_threads = size / 2;
-  // TODO(@mt-ai): MUSA warp_size is 128 on __MUSA_ARCH__ <= 22, which would
-  // cause an error of this kernel, so we hard code it as 32 here. However, the
-  // warp size may be changed on __MUSA_ARCH__ > 22 to be 32 so that we could
-  // leave this code as it is then. int warp_size = at::musa::warp_size();
-  const int warp_size = 32;
+  int warp_size = at::musa::warp_size();
   TORCH_INTERNAL_ASSERT(
       num_threads % warp_size == 0 &&
-          num_threads <= cuda_utils::kCUDABlockReduceMaxThreads,
+          num_threads <= cuda_utils::kCUDABlockReduceMaxThreads(),
       "");
   const auto memsize =
       (sizeof(scalar_t) * size) + (2 * size * sizeof(unsigned int));
   compute_mode<scalar_t, size>
       <<<grid, num_threads, memsize, at::musa::getCurrentMUSAStream()>>>(
-          self.data_ptr<scalar_t>(), ti_values, ti_indices, slice_size, slices);
+          self.const_data_ptr<scalar_t>(),
+          ti_values,
+          ti_indices,
+          slice_size,
+          slices);
   C10_MUSA_KERNEL_LAUNCH_CHECK();
 }
 

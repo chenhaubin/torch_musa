@@ -2,188 +2,209 @@
 
 """Register Sharding rules or strategies for PyTorch DTensor operators"""
 
-from typing import List, Optional, Sequence
 
 import torch
-from torch.distributed.tensor._dtensor_spec import DTensorSpec
 from torch.distributed.tensor._op_schema import (
     OpSchema,
     OpStrategy,
-    PlacementStrategy,
+    PlacementList,
     RuntimeSchemaInfo,
 )
 from torch.distributed.tensor._ops.utils import (
-    generate_redistribute_costs,
+    expand_to_full_mesh_op_strategy,
     register_op_strategy,
 )
-from torch.distributed.tensor._utils import normalize_to_torch_size
-from torch.distributed.tensor._ops._math_ops import (
-    _replicate_dims_start_at,
-    map_placements_after_reduction,
-    _infer_reduce_dims_map,
+
+from torch.distributed.tensor.placement_types import Replicate, Shard
+
+
+# pylint: disable-all
+@register_op_strategy(
+    torch.ops.aten._scaled_dot_product_attention_flash_musa.default,
+    schema_info=RuntimeSchemaInfo(4),
 )
+def scaled_dot_product_attention_flash_musa_strategy(op_schema: OpSchema) -> OpStrategy:
+    """DTensor sharding strategy of _scaled_dot_product_attention_flash_musa"""
+    # args: query, key, value, attn_mask, dropout_p, is_causal, scale,
+
+    mesh = op_schema.get_mesh_from_args()
+
+    args = op_schema.args_schema
+    n_args = len(args)
+
+    query_strategy = args[0]  # query
+
+    attn_mask_strategy = args[3] if n_args > 3 else None
+    dropout_p = args[4] if n_args > 4 else 0.0
+
+    assert isinstance(query_strategy, OpStrategy)
+
+    query_shape = query_strategy.strategies[0].output_spec.shape
+    is_4d = len(query_shape) == 4
+
+    single_mesh_dim_strategies = []
+
+    all_replicate: PlacementList = [
+        Replicate(),  # output
+        Replicate(),  # logsumexp
+        Replicate(),  # dropout_mask
+        Replicate(),  # query
+        Replicate(),  # key
+        Replicate(),  # value
+    ]
+    if attn_mask_strategy is not None:
+        all_replicate.append(Replicate())  # attn_mask
+
+    single_mesh_dim_strategies.append(all_replicate)
+
+    if is_4d:
+        # [batch_size, num_heads, seq_len, head_dim]
+        tp_sharding = Shard(1)
+    else:
+        # [num_heads, seq_len, head_dim]
+        tp_sharding = Shard(0)
+
+    has_dropout = dropout_p > 0.0
+    dropout_mask_sharding = tp_sharding if has_dropout else Replicate()
+
+    num_heads_dim_sharding: PlacementList = [
+        tp_sharding,  # output
+        tp_sharding,  # logsumexp
+        dropout_mask_sharding,  # dropout_mask
+        tp_sharding,  # query
+        tp_sharding,  # key
+        tp_sharding,  # value
+    ]
+    if attn_mask_strategy is not None:
+        num_heads_dim_sharding.append(Replicate())
+
+    single_mesh_dim_strategies.append(num_heads_dim_sharding)
+
+    # Context Parallelism: shards on the sequence dim
+    if is_4d:
+        seq_dim_sharding = Shard(2)
+    else:
+        seq_dim_sharding = Shard(1)
+
+    seq_parallel_sharding: PlacementList = [
+        seq_dim_sharding,  # output
+        seq_dim_sharding,  # logsumexp
+        Replicate(),  # dropout_mask
+        seq_dim_sharding,  # query
+        seq_dim_sharding,  # key
+        seq_dim_sharding,  # value
+    ]
+    if attn_mask_strategy is not None:
+        seq_parallel_sharding.append(Replicate())
+
+    single_mesh_dim_strategies.append(seq_parallel_sharding)
+
+    return expand_to_full_mesh_op_strategy(
+        mesh, op_schema, single_mesh_dim_strategies, input_index=3
+    )
 
 
 @register_op_strategy(
-    [torch.ops.aten._fused_rmsnorm_forward.default],
-    schema_info=RuntimeSchemaInfo(1),
+    torch.ops.aten._scaled_dot_product_attention_flash_musa_backward.default,
+    schema_info=RuntimeSchemaInfo(7),
 )
-def fused_rmsnorm_strategy(op_schema: OpSchema) -> OpStrategy:
-    """DTensor sharding strategy of fused_rmsnorm_forward"""
-    # args: input, normalized_shape, eps, weight (optional)
-    assert len(op_schema.args_schema) == 4
-    input_strategy, normalized_shape, _, weight_strategy = op_schema.args_schema
+def scaled_dot_product_attention_flash_musa_backward_strategy(
+    op_schema: OpSchema,
+) -> OpStrategy:
+    """DTensor sharding strategy of _scaled_dot_product_attention_flash_musa_backward"""
+    # args: grad_out, query, key, value, output, logsumexp,
+    # dropout_mask, is_causal, attn_mask, scale
 
-    assert isinstance(input_strategy, OpStrategy)
-    assert isinstance(normalized_shape, (int, Sequence, torch.Size))
-    normalized_size = normalize_to_torch_size(normalized_shape)
+    # backward op does not need to validate the mesh since forward op has already done it
+    mesh = op_schema.get_mesh_from_args(validate=False)
 
-    # trailing on last # dims
-    input_ndim = input_strategy.ndim
-    axis = input_ndim - len(normalized_size)
+    args = op_schema.args_schema
+    n_args = len(args)
 
-    output_strategy = OpStrategy([])
-    for idx, input_placement_strategy in enumerate(input_strategy.strategies):
-        op_args_target_specs = []
-        redistribute_costs = []
-        input_src_spec = input_placement_strategy.output_spec
+    grad_out_strategy = args[0]  # grad_out
+    query_strategy = args[1]  # query
 
-        input_target_spec = DTensorSpec(
-            mesh=input_strategy.mesh,
-            placements=_replicate_dims_start_at(input_src_spec.placements, axis),
-            tensor_meta=input_src_spec.tensor_meta,
-        )
-        op_args_target_specs.append(input_target_spec)
-        redistribute_costs.append(
-            generate_redistribute_costs(input_strategy, input_target_spec)
-        )
-
-        if weight_strategy:
-            assert isinstance(weight_strategy, OpStrategy)
-            weight_src_spec = weight_strategy.strategies[idx].output_spec
-            weight_target_spec = DTensorSpec(
-                mesh=weight_strategy.mesh,
-                placements=_replicate_dims_start_at(weight_src_spec.placements),
-                tensor_meta=weight_src_spec.tensor_meta,
-            )
-            op_args_target_specs.append(weight_target_spec)
-            redistribute_costs.append(
-                generate_redistribute_costs(weight_strategy, weight_target_spec)
-            )
-
-        output_target_spec = input_target_spec
-        output_strategy.strategies.append(
-            PlacementStrategy(
-                output_specs=output_target_spec,
-                input_specs=op_args_target_specs,
-                redistribute_cost=redistribute_costs,
-            )
-        )
-
-    return output_strategy
-
-
-@register_op_strategy(
-    [torch.ops.aten._fused_rmsnorm_backward.default],
-    schema_info=RuntimeSchemaInfo(3),
-)
-def fused_rmsnorm_bwd_strategy(op_schema: OpSchema) -> OpStrategy:
-    """DTensor sharding strategy of fused_rmsnorm_backward"""
-    # args: grad_out, invvar, input, normalized_shape, eps, weight
-    assert len(op_schema.args_schema) == 6
-    (
-        grad_out_strategy,
-        invvar_strategy,
-        input_strategy,
-        normalized_shape,
-        _,
-        weight_strategy,
-    ) = op_schema.args_schema
+    attn_mask_strategy = args[8] if n_args > 8 else None
 
     assert isinstance(grad_out_strategy, OpStrategy)
-    assert isinstance(invvar_strategy, OpStrategy)
-    assert isinstance(input_strategy, OpStrategy)
-    assert isinstance(weight_strategy, OpStrategy)
+    assert isinstance(query_strategy, OpStrategy)
 
-    assert isinstance(normalized_shape, (int, Sequence, torch.Size))
-    normalized_size = normalize_to_torch_size(normalized_shape)
-    input_ndim = input_strategy.ndim
-    axis = input_ndim - len(normalized_size)
-    outer_dims = list(range(axis))
+    query_shape = query_strategy.strategies[0].output_spec.shape
+    is_4d = len(query_shape) == 4
 
-    out_tuple_strategy = OpStrategy([])
-    for idx, input_placement_strategy in enumerate(input_strategy.strategies):
-        output_specs_list: List[Optional[DTensorSpec]] = []
-        input_specs_list: List[DTensorSpec] = []
-        redistribute_costs = []
+    has_attn_mask = attn_mask_strategy is not None and isinstance(
+        attn_mask_strategy, OpStrategy
+    )
 
-        input_src_spec = input_placement_strategy.output_spec
+    single_mesh_dim_strategies = []
 
-        grad_out_target_spec = DTensorSpec(
-            mesh=grad_out_strategy.mesh,
-            placements=_replicate_dims_start_at(input_src_spec.placements, axis),
-            tensor_meta=input_src_spec.tensor_meta,
-        )
-        input_specs_list.append(grad_out_target_spec)
-        redistribute_costs.append(
-            generate_redistribute_costs(grad_out_strategy, grad_out_target_spec)
-        )
-        output_specs_list.append(grad_out_target_spec)
+    all_replicate: PlacementList = [
+        Replicate(),  # grad_query
+        Replicate(),  # grad_key
+        Replicate(),  # grad_value
+        Replicate(),  # grad_attn_mask
+        Replicate(),  # grad_out
+        Replicate(),  # query
+        Replicate(),  # key
+        Replicate(),  # value
+        Replicate(),  # output
+        Replicate(),  # logsumexp
+        Replicate(),  # dropout_mask
+    ]
+    if has_attn_mask:
+        all_replicate.append(Replicate())  # attn_mask
 
-        # arg: invvar
-        invvar_src_spec = invvar_strategy.strategies[idx].output_spec
-        input_specs_list.append(invvar_src_spec)
-        redistribute_costs.append([0.0 for _ in invvar_strategy.strategies])
+    single_mesh_dim_strategies.append(all_replicate)
 
-        # arg: input
-        input_target_spec = DTensorSpec(
-            mesh=input_strategy.mesh,
-            placements=_replicate_dims_start_at(input_src_spec.placements, axis),
-            tensor_meta=input_src_spec.tensor_meta,
-        )
-        input_specs_list.append(input_target_spec)
-        redistribute_costs.append(
-            generate_redistribute_costs(input_strategy, input_target_spec)
-        )
+    if is_4d:
+        # [batch_size, num_heads, seq_len, head_dim]
+        tp_sharding = Shard(1)
+    else:
+        # [num_heads, seq_len, head_dim]
+        tp_sharding = Shard(0)
 
-        # arg: weight
-        if weight_strategy is not None:
-            # should we respect the input Spec of weight ?
-            # weight_src_spec = weight_strategy.strategies[idx].output_spec
-            # input_specs_list.append(weight_src_spec)
-            # redistribute_costs.append([0.0 for _ in weight_strategy.strategies])
+    num_heads_dim_sharding: PlacementList = [
+        tp_sharding,  # grad_query
+        tp_sharding,  # grad_key
+        tp_sharding,  # grad_value
+        Replicate(),  # grad_attn_mask
+        tp_sharding,  # grad_out
+        tp_sharding,  # query
+        tp_sharding,  # key
+        tp_sharding,  # value
+        tp_sharding,  # output
+        tp_sharding,  # logsumexp
+        Replicate(),  # dropout_mask
+    ]
+    if has_attn_mask:
+        num_heads_dim_sharding.append(Replicate())  # attn_mask
 
-            weight_src_spec = weight_strategy.strategies[idx].output_spec
-            weight_target_spec = DTensorSpec(
-                mesh=weight_strategy.mesh,
-                placements=_replicate_dims_start_at(weight_src_spec.placements),
-                tensor_meta=weight_src_spec.tensor_meta,
-            )
-            input_specs_list.append(weight_target_spec)
-            redistribute_costs.append(
-                generate_redistribute_costs(weight_strategy, weight_target_spec)
-            )
+    single_mesh_dim_strategies.append(num_heads_dim_sharding)
 
-            inp_placements = _replicate_dims_start_at(input_src_spec.placements, axis)
-            reduce_dims_map = _infer_reduce_dims_map(
-                outer_dims, input_src_spec.ndim, False
-            )
-            out_placements = map_placements_after_reduction(
-                inp_placements, outer_dims, reduce_dims_map, "sum"
-            )
-            weight_out_spec = DTensorSpec(
-                mesh=weight_strategy.mesh,
-                placements=out_placements,
-                tensor_meta=weight_src_spec.tensor_meta,
-            )
-            output_specs_list.append(weight_out_spec)
+    # Context Parallelism: shards on the sequence dim
+    if is_4d:
+        seq_dim_sharding = Shard(2)
+    else:
+        seq_dim_sharding = Shard(1)
 
-        out_tuple_strategy.strategies.append(
-            PlacementStrategy(
-                output_specs=tuple(output_specs_list),
-                input_specs=input_specs_list,
-                redistribute_cost=redistribute_costs,
-            )
-        )
+    seq_parallel_sharding: PlacementList = [
+        seq_dim_sharding,  # grad_query
+        seq_dim_sharding,  # grad_key
+        seq_dim_sharding,  # grad_value
+        Replicate(),  # grad_attn_mask
+        seq_dim_sharding,  # grad_out
+        seq_dim_sharding,  # query
+        seq_dim_sharding,  # key
+        seq_dim_sharding,  # value
+        seq_dim_sharding,  # output
+        seq_dim_sharding,  # logsumexp
+        Replicate(),  # dropout_mask
+    ]
+    if has_attn_mask:
+        seq_parallel_sharding.append(Replicate())  # attn_mask
 
-    return out_tuple_strategy
+    single_mesh_dim_strategies.append(seq_parallel_sharding)
+
+    return expand_to_full_mesh_op_strategy(
+        mesh, op_schema, single_mesh_dim_strategies, input_index=4
+    )

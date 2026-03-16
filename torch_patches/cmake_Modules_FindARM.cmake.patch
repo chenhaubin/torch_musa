@@ -1,0 +1,19 @@
+diff --git a/cmake/Modules/FindARM.cmake b/cmake/Modules/FindARM.cmake
+index 903025c..7d419e2 100644
+--- a/cmake/Modules/FindARM.cmake
++++ b/cmake/Modules/FindARM.cmake
+@@ -131,8 +131,13 @@ IF(CMAKE_SYSTEM_NAME MATCHES "Linux")
+         CHECK_C_SOURCE_COMPILES("${code}" ${lang}_HAS_${type})
+       ENDIF()
+ 
++      file(READ "/proc/cpuinfo" CPUINFO)
++      if(CPUINFO MATCHES ".*\\bfflags\\b:.*\\bsve\\b")
++         set(CPU_HAS_SVE TRUE)
++      endif()
++
+       # If the compilation test is successful, set appropriate variables indicating support
+-      IF(${lang}_HAS_${type})
++      IF(${lang}_HAS_${type} AND CPU_HAS_SVE)
+         set(${lang}_SVE_FOUND TRUE CACHE BOOL "SVE available on host")
+         SET(${lang}_${type}_FOUND TRUE CACHE BOOL "${lang} ${type} support")
+         SET(${lang}_${type}_FLAGS "${flags}" CACHE STRING "${lang} ${type} flags")

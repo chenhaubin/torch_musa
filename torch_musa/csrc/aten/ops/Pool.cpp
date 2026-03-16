@@ -663,7 +663,7 @@ Tensor AdaptiveAvgPool2dBwd(const Tensor& grad_output, const Tensor& input) {
   PoolParams params;
   params.mode = PoolingMode::ADAPTIVE_AVGPOOL;
 
-  Tensor grad_input = at::empty(input.sizes(), input.options());
+  Tensor grad_input = at::empty_like(input);
 
   TORCH_CHECK(
       grad_output.device().type() == kMUSA,

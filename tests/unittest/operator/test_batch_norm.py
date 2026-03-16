@@ -137,25 +137,33 @@ inputs = [
 
 @testing.test_on_nonzero_card_if_multiple_musa_device(1)
 @pytest.mark.parametrize("inputs", inputs)
-@pytest.mark.parametrize("train", [True])
+@pytest.mark.parametrize("train", train)
 @pytest.mark.parametrize("affine", affine)
 def test_batch_norm_bwd(inputs, train, affine):
     torch_op = inputs[0]
     input_data_list = inputs[1]
     for input_data in input_data_list:
         model = torch_op(100, affine=affine)
-        musa_model = torch_op(100).to("musa")
+        musa_model = torch_op(100, affine=affine).to("musa")
         model.train(train)
         musa_model.train(train)
-        output = model(input_data)
-        output_musa = musa_model(input_data.to("musa"))
+        input_data_cpu = input_data.detach().clone()
+        input_data_cpu.requires_grad = True
+        input_data_musa = input_data.detach().clone().to("musa")
+        input_data_musa.requires_grad = True
+        output = model(input_data_cpu)
+        output_musa = musa_model(input_data_musa)
         output.sum().backward()
         output_musa.sum().backward()
+        if affine:
+            assert testing.DefaultComparator(abs_diff=1e-3)(
+                model.weight.grad, musa_model.weight.grad.cpu()
+            )
+            assert testing.DefaultComparator(abs_diff=1e-3)(
+                model.bias.grad, musa_model.bias.grad.cpu()
+            )
         assert testing.DefaultComparator(abs_diff=1e-3)(
-            model.weight.grad, musa_model.weight.grad.cpu()
-        )
-        assert testing.DefaultComparator(abs_diff=1e-3)(
-            model.bias.grad, musa_model.bias.grad.cpu()
+            input_data_cpu.grad, input_data_musa.grad.cpu()
         )
 
 

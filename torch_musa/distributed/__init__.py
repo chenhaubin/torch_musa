@@ -1,6 +1,7 @@
 """apply distributed patch"""
 
-# pylint: disable=import-outside-toplevel
+# pylint: disable=C0415
+
 from .tensor import *
 
 

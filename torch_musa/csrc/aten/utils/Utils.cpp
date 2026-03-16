@@ -331,7 +331,11 @@ size_t DTypeSize(c10::ScalarType type) {
       break;
     case at::ScalarType::Long:
     case at::ScalarType::Double:
+    case at::ScalarType::ComplexFloat:
       size = 8;
+      break;
+    case at::ScalarType::ComplexDouble:
+      size = 16;
       break;
     default:
       TORCH_CHECK(false, "DTypeSize Unsupported tensor dtype: ", type);

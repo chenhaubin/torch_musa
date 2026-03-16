@@ -1,8 +1,17 @@
 diff --git a/torch/_inductor/codecache.py b/torch/_inductor/codecache.py
-index dc9f5c2..43a86b7 100644
+index 7b24208..3e3a584 100644
 --- a/torch/_inductor/codecache.py
 +++ b/torch/_inductor/codecache.py
-@@ -187,7 +187,7 @@ class CacheBase:
+@@ -170,6 +170,8 @@ def get_kernel_bin_format(device: str) -> str:
+         return "cubin" if torch.version.hip is None else "hsaco"
+     elif device == "xpu":
+         return "spv"
++    elif device == "musa":
++        return "mubin"
+     else:
+         return ""
+ 
+@@ -203,7 +205,7 @@ class CacheBase:
              else:
                  system["device"]["name"] = device_properties.gcnArchName
                  system["version"]["hip"] = torch.version.hip
@@ -11,3 +20,57 @@ index dc9f5c2..43a86b7 100644
              # If cuda is not installed, none of the above config is relevant.
              system = {}
  
+@@ -1713,7 +1715,11 @@ class AotCodeCompiler:
+         """
+         generated_files: list[Union[str, Weights]] = additional_files  # type: ignore[assignment]
+ 
+-        _set_gpu_runtime_env()  # cpp_extension consults the env
++        if device_type == "musa":
++            from torch_musa.utils.musa_extension import _find_musa_home
++            _find_musa_home()  # cpp_extension consults the env
++        else:
++            _set_gpu_runtime_env()  # cpp_extension consults the env
+ 
+         picked_vec_isa = pick_vec_isa()
+         vec_isa_cmd_gen = CppBuilder(
+@@ -1894,7 +1900,8 @@ class AotCodeCompiler:
+ 
+             # Intel compiler failed to compile this manually constructed assembly file.
+             # Switch XPU to use consts cpp build.
+-            if device_type == "xpu":
++            # MUSA also does not support asm build.
++            if device_type in ("xpu", "musa"):
+                 use_asm_build = False
+ 
+             is_large_consts = len(consts) > 1024
+@@ -2107,13 +2114,13 @@ end
+                 if specified_artifact_name
+                 else str(wrapper_path_operator.with_suffix(".so"))
+             )
+-            all_cuda = all(
+-                graph.get_original_value_of_constant(name).is_cuda
++            all_on_device = all(
++                graph.get_original_value_of_constant(name).device.type == device_type
+                 for name in graph.constants.keys()
+                 if name not in graph.folded_constants
+             )
+ 
+-            def _to_bytes(t: torch.Tensor, all_cuda: bool) -> bytes:
++            def _to_bytes(t: torch.Tensor, all_on_device: bool) -> bytes:
+                 def _pad_to_alignment(raw_bytes: bytes) -> bytes:
+                     padded_bytes = raw_bytes.ljust(
+                         (len(raw_bytes) + ALIGN_BYTES - 1) // ALIGN_BYTES * ALIGN_BYTES,
+@@ -2141,11 +2148,11 @@ end
+                     ctypes.POINTER(ctypes.c_ubyte * nbytes),
+                 )
+                 raw_bytes = bytes(raw_array.contents)
+-                return raw_bytes if all_cuda else _pad_to_alignment(raw_bytes)
++                return raw_bytes if all_on_device else _pad_to_alignment(raw_bytes)
+ 
+             if config.aot_inductor.package_constants_in_so:
+                 serialized_weights = b"".join(
+-                    _to_bytes(graph.get_original_value_of_constant(name), all_cuda)
++                    _to_bytes(graph.get_original_value_of_constant(name), all_on_device)
+                     for name in graph.constants.keys()
+                     if name not in graph.folded_constants
+                 )

@@ -218,7 +218,6 @@ Tensor Unary(
     }
   }
 
-  MUSA_TENSOR_TYPE_CHECK(input);
   Tensor input_tmp;
   const bool is_input_transpose_contig = IsTranspose(input, false);
   if (is_input_transpose_contig) {
@@ -311,23 +310,10 @@ void UnaryOut(
 
 DEFINE_ACTIVATE_OP(Relu, UNARY_MODE::RELU)
 DEFINE_ACTIVATE_OP(Silu, UNARY_MODE::SILU)
-DEFINE_ACTIVATE_OP(Sqrt, UNARY_MODE::SQRT)
 DEFINE_ACTIVATE_OP(Round, UNARY_MODE::ROUND)
-DEFINE_ACTIVATE_OP(Rsqrt, UNARY_MODE::RSQRT)
 DEFINE_ACTIVATE_OP(Mish, UNARY_MODE::MISH)
-DEFINE_ACTIVATE_OP(HardSwish, UNARY_MODE::HARDSWISH)
-DEFINE_ACTIVATE_OP(Tanh, UNARY_MODE::TANH)
-DEFINE_ACTIVATE_OP(Tan, UNARY_MODE::TAN)
-DEFINE_ACTIVATE_OP(Sigmoid, UNARY_MODE::SIGMOID)
-DEFINE_ACTIVATE_OP(Exp, UNARY_MODE::EXP)
-DEFINE_ACTIVATE_OP(Sin, UNARY_MODE::SIN)
-DEFINE_ACTIVATE_OP(Cos, UNARY_MODE::COS)
 DEFINE_ACTIVATE_OP(Abs, UNARY_MODE::ABS)
-DEFINE_ACTIVATE_OP(Acos, UNARY_MODE::ACOS)
-DEFINE_ACTIVATE_OP(Atan, UNARY_MODE::ATAN)
-DEFINE_ACTIVATE_OP(Log, UNARY_MODE::LOG)
-DEFINE_ACTIVATE_OP(Log10, UNARY_MODE::LOG10)
-DEFINE_ACTIVATE_OP(Log2, UNARY_MODE::LOG2)
+DEFINE_ACTIVATE_OP(HardSwish, UNARY_MODE::HARDSWISH)
 DEFINE_ACTIVATE_OP_ARGS(HardSigmoid, UNARY_MODE::HARDSIGMOID, 0.166667, 0.5)
 
 #define SCALAR_COMPARISON(op_name, mode)                         \
@@ -439,7 +425,6 @@ Tensor Gelu(const Tensor& self, c10::string_view approximate) {
       ? UNARY_MODE::GELU
       : UNARY_MODE::GELU_TANH;
 
-  MUSA_TENSOR_TYPE_CHECK(self);
   const c10::musa::MUSAGuard device_guard(self.device());
   return Unary(__func__, self, [&](::musa::dnn::Unary& op) {
     CHECK_MUDNN_STATUS(op.SetMode(mode), "SetMode");
@@ -451,7 +436,6 @@ Tensor& Gelu_(Tensor& self, c10::string_view approximate) {
   auto mode = approximate_type == at::native::GeluType::None
       ? UNARY_MODE::GELU
       : UNARY_MODE::GELU_TANH;
-  MUSA_TENSOR_TYPE_CHECK(self);
   const c10::musa::MUSAGuard device_guard(self.device());
   Unary_(__func__, self, [&](::musa::dnn::Unary& op) {
     CHECK_MUDNN_STATUS(op.SetMode(mode), "SetMode");
@@ -492,7 +476,6 @@ void NegCall(
     at::native::neg_kernel_cuda(iter);
     return;
   }
-  MUSA_TENSOR_TYPE_CHECK(self);
   Tensor input;
   const bool isT =
       IsTranspose(self, false) && (self_output || IsTranspose(out, false));
@@ -521,6 +504,8 @@ void NegCall(
       });
       break;
     }
+    case ScalarType::Char:
+    case ScalarType::Short:
     case ScalarType::Int:
     case ScalarType::Long: {
       const int64_t alpha = val.value().to<int64_t>();

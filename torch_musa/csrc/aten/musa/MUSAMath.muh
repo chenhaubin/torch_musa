@@ -4,7 +4,7 @@
 #include <math.h>
 #include <type_traits>
 
-#include "mudnn.h"
+#include <musa_fp16.h>
 
 //! fast_div ref from include/cutlass/fast_math.h see
 //! https://ridiculousfish.com/blog/posts/labor-of-division-episode-i.html or

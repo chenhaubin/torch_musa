@@ -11,6 +11,7 @@
 #include <c10/util/Optional.h>
 #include <mccl.h>
 #include <torch/csrc/distributed/c10d/TraceUtils.h>
+#include <torch/csrc/distributed/c10d/logger.hpp>
 
 #include "torch_musa/csrc/core/MUSAEvent.h"
 

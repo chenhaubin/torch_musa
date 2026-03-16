@@ -29,9 +29,6 @@ def _make_torch_musa_aten_fallback():
     # These ops or decomp ops work incorrect or have lower perf in triton,
     # before fixed by triton, we fallback them to aten.
     remove_decompositions(decompositions, _decomps_to_exclude)
-    _fallback_to_aten(aten.nll_loss_forward)
-    _fallback_to_aten(aten.nll_loss_backward)
-    _fallback_to_aten(aten.embedding_dense_backward)  # torch_musa' impl has better perf
 
 
 def _fallback_to_aten(

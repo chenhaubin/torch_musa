@@ -519,11 +519,11 @@
   dispatch:
     PrivateUse1: MuDNNMathSDPABwd
 
-- func: _fused_rmsnorm_forward
+- func: _fused_rms_norm
   dispatch:
     PrivateUse1: FusedRMSNormForward
 
-- func: _fused_rmsnorm_backward
+- func: _fused_rms_norm_backward
   dispatch:
     PrivateUse1: FusedRMSNormBackward
 
@@ -1180,15 +1180,23 @@
     PrivateUse1: _BatchNormWithUpdateout
 
 - func: add.Tensor
+  device_guard: True
   dispatch:
     PrivateUse1: AddTensor
+    SparsePrivateUse1: add_sparse
 - func: add_.Tensor
+  device_guard: True
   dispatch:
     PrivateUse1: AddTensor_
+    SparsePrivateUse1: add_sparse_
+    #SparseCsrPrivateUse1: add_sparse_csr_
 - func: add.out
-  structured: false
+  device_guard: True
+  structured: False
   dispatch:
     PrivateUse1: AddTensorOut
+    SparsePrivateUse1: add_out_sparse_cuda
+    #SparseCsrPrivateUse1: add_out_sparse_compressed_cuda
 
 - func: div.Tensor
   dispatch:
@@ -1507,6 +1515,7 @@
 - func: _copy_from
   dispatch:
     PrivateUse1: MUSACopyFrom
+    SparsePrivateUse1: MUSACopyFrom
 
 - func: bernoulli_.float
   dispatch:
@@ -1549,8 +1558,10 @@
     PrivateUse1: EmbeddingBag
 
 - func: _embedding_bag_backward
+  device_check: ExactSame
+  device_guard: True
   dispatch:
-    PrivateUse1: EmbeddingBagBackward
+    PrivateUse1: _embedding_bag_backward_symint
 
 - func: _embedding_bag_dense_backward
   device_check: ExactSame
@@ -3144,8 +3155,11 @@
     PrivateUse1: StftCenter
 
 - func: empty.memory_format
+  device_guard: True
+  device_check: ExactSame
   dispatch:
     PrivateUse1: EmptyMUSA
+    SparsePrivateUse1: empty_sparse
     QuantizedPrivateUse1: EmptyUnknownQuantized
 
 - func: empty_strided
@@ -4172,6 +4186,10 @@
 - func: sparse_dim
   dispatch:
     SparsePrivateUse1: sparse_dim_sparse
+
+- func: dense_dim
+  dispatch:
+    SparsePrivateUse1: dense_dim_sparse
 
 - func: _nnz
   dispatch:

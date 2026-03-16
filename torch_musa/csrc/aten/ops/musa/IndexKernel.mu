@@ -4,6 +4,7 @@
 #include <ATen/core/List.h>
 #include <ATen/core/Tensor.h>
 #include <ATen/native/IndexKernel.h>
+#include <c10/util/complex.h>
 #include <ATen/musa/detail/IndexUtils.muh>
 #include <ATen/musa/detail/OffsetCalculator.muh>
 #include <ATen/native/musa/KernelUtils.muh>
@@ -31,7 +32,7 @@ template <typename scalar_t>
 struct vec_traits {
   static constexpr int64_t vlen = sizeof(scalar_t) <= 4
       ? (sizeof(scalar_t) <= 2 ? (sizeof(scalar_t) <= 1 ? 16 : 8) : 4)
-      : 2;
+      : (sizeof(scalar_t) <= 8 ? 2 : 1);
   using vec_dtype = VecType<scalar_t, vlen * sizeof(scalar_t) * 8>;
 };
 
@@ -58,7 +59,15 @@ __device__ __forceinline__ void indexput_io_kernel(
   } else if constexpr (IOType == IndexKernelIOType::ELEMENTWISE) {
     *(scalar_t*)(out_data + offset) = *(scalar_t*)in_data;
   } else {
-    at::musa::gpuAtomicAdd((scalar_t*)(out_data + offset), *(scalar_t*)in_data);
+    if constexpr (
+        std::is_same<scalar_t, c10::complex<float>>::value ||
+        std::is_same<scalar_t, c10::complex<double>>::value) {
+      at::musa::gpuAtomicAddComplex(
+          (scalar_t*)(out_data + offset), *(scalar_t*)in_data);
+    } else {
+      at::musa::gpuAtomicAdd(
+          (scalar_t*)(out_data + offset), *(scalar_t*)in_data);
+    }
   }
 }
 
@@ -593,7 +602,7 @@ static void IndexPutKernel(
     IntArrayRef indexed_stride,
     bool accumulate) {
   if (accumulate) {
-    AT_DISPATCH_ALL_TYPES_AND3(
+    AT_DISPATCH_ALL_TYPES_AND_COMPLEX_AND3(
         at::ScalarType::Half,
         at::ScalarType::BFloat16,
         at::ScalarType::Bool,
@@ -604,7 +613,7 @@ static void IndexPutKernel(
               iter, indexed_size, indexed_stride);
         });
   } else {
-    AT_DISPATCH_ALL_TYPES_AND3(
+    AT_DISPATCH_ALL_TYPES_AND_COMPLEX_AND3(
         at::ScalarType::Half,
         at::ScalarType::BFloat16,
         at::ScalarType::Bool,

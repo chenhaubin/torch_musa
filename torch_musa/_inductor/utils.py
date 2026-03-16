@@ -5,6 +5,9 @@ __all__ = ["_apply_util_patches"]
 # pylint: disable=C0103,C0415,C0116,W0221
 import functools
 from functools import cached_property
+from typing import (
+    Union,
+)
 from typing_extensions import (
     Self,
     Callable,
@@ -16,6 +19,9 @@ from torch._inductor.runtime.benchmarking import (
     Benchmarker,
 )
 from torch.utils._triton import has_triton_package
+from torch._inductor.runtime.hints import DeviceProperties
+from torch._inductor.utils import log
+from torch._inductor.utils import get_gpu_type
 
 GPU_TYPES = ["musa"]
 
@@ -125,9 +131,35 @@ def aot_inductor_launcher(so_path: str, device: str):
         """
     raise RuntimeError(f"Unsupported device: {device}")
 
+@functools.cache
+def is_big_gpu(index_or_device: Union[int, torch.device] = 0) -> bool:
+    if isinstance(index_or_device, torch.device):
+        device = index_or_device
+    else:
+        device = torch.device(get_gpu_type(), index_or_device)
+
+    prop = DeviceProperties.create(device)
+
+    min_sms = 16 if device.type == "xpu" else 68  # 3080
+    try:
+        if torch.musa.is_available():
+            # Set min_sms to 8 to enable GEMM max_autotune for MUSA M1000 GPUs:
+            min_sms = 8  # M1000
+    except AttributeError:
+        pass
+
+    avail_sms = prop.multi_processor_count
+    if avail_sms < min_sms:
+        log.warning(
+            "Not enough SMs to use max_autotune_gemm mode",
+            extra={"min_sms": min_sms, "avail_sms": avail_sms},
+        )
+        return False
+    return True
 
 def _apply_util_patches():
     torch._inductor.utils.is_gpu = is_gpu
     torch._inductor.runtime.benchmarking.benchmarker = TritonBenchmarker()
     torch.utils._triton.has_triton = has_triton
     torch._inductor.utils.GPU_TYPES = GPU_TYPES
+    torch._inductor.utils.is_big_gpu = is_big_gpu

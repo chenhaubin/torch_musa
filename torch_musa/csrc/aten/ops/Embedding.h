@@ -8,16 +8,6 @@
 namespace at {
 namespace native {
 
-DECLARE_DISPATCH(
-    void (*)(
-        Tensor&,
-        const Tensor&,
-        const Tensor&,
-        const Tensor&,
-        const int64_t,
-        const int64_t),
-    embedding_bag_stub);
-
 using embedding_dense_backward_fn =
     Tensor (*)(const Tensor&, const Tensor&, int64_t, int64_t, bool);
 

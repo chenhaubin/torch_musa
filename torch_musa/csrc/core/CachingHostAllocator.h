@@ -7,24 +7,65 @@
 
 namespace at::musa {
 
+//
 // A caching allocator for MUSA host allocations (pinned memory).
-c10::Allocator* getCachingHostAllocator();
+//
+// This provides a drop-in replacement for THMusaHostAllocator, which re-uses
+// freed pinned (page-locked) memory allocations. This avoids device
+// synchronizations due to cudaFreeHost calls.
+//
+// To ensure correct behavior, THCCachingHostAllocator_recordEvent must be
+// called anytime a pointer from this allocator is used in a musaMemcpyAsync
+// call between host and device, and passed the corresponding context from the
+// allocation. This is currently invoked by at::native::copy_kernel_musa.
+//
+C10_DEPRECATED_MESSAGE(
+    "at::musa::getCachingHostAllocator() is deprecated. Please use at::getHostAllocator(at::kMUSA) instead.")
+inline at::HostAllocator* getCachingHostAllocator() {
+  return at::getHostAllocator(at::kMUSA);
+}
 
 // Records an event in the specified stream. The allocation corresponding to the
 // input `ptr`/`ctx` will not be re-used until the event has occurred.
-bool CachingHostAllocator_recordEvent(void* ptr, void* ctx, MUSAStream stream);
-
-// Releases cached pinned memory allocations via musaHostFree
-void CachingHostAllocator_emptyCache();
-
-inline at::DataPtr HostAlloc(size_t size) {
-  return getCachingHostAllocator()->allocate(size);
+C10_DEPRECATED_MESSAGE(
+    "at::musa::CachingHostAllocator_recordEvent(...) is deprecated. Please use at::getHostAllocator(at::kMUSA)->record_event(...) instead.")
+inline bool CachingHostAllocator_recordEvent(
+    void* ptr,
+    void* ctx,
+    c10::musa::MUSAStream stream) {
+  return getHostAllocator(at::kMUSA)->record_event(ptr, ctx, stream.unwrap());
 }
 
-at::HostStats CachingHostAllocator_getStats();
+// Releases cached pinned memory allocations via cudaHostFree
+C10_DEPRECATED_MESSAGE(
+    "at::musa::CachingHostAllocator_emptyCache() is deprecated. Please use at::getHostAllocator(at::kMUSA)->empty_cache() instead.")
+inline void CachingHostAllocator_emptyCache() {
+  getHostAllocator(at::kMUSA)->empty_cache();
+}
 
-void CachingHostAllocator_resetAccumulatedStats();
-void CachingHostAllocator_resetPeakStats();
+C10_DEPRECATED_MESSAGE(
+    "at::musa::HostAlloc(...) is deprecated. Please use at::getHostAllocator(at::kMUSA)->allocate(...) instead.")
+inline at::DataPtr HostAlloc(size_t size) {
+  return getHostAllocator(at::kMUSA)->allocate(size);
+}
+
+C10_DEPRECATED_MESSAGE(
+    "at::musa::CachingHostAllocator_getStats() is deprecated. Please use at::getHostAllocator(at::kMUSA)->get_stats() instead.")
+inline at::HostStats CachingHostAllocator_getStats() {
+  return getHostAllocator(at::kMUSA)->get_stats();
+}
+
+C10_DEPRECATED_MESSAGE(
+    "at::musa::CachingHostAllocator_resetAccumulatedStats() is deprecated. Please use at::getHostAllocator(at::kMUSA)->reset_accumulated_stats() instead.")
+inline void CachingHostAllocator_resetAccumulatedStats() {
+  getHostAllocator(at::kMUSA)->reset_accumulated_stats();
+}
+
+C10_DEPRECATED_MESSAGE(
+    "at::musa::CachingHostAllocator_resetPeakStats() is deprecated. Please use at::getHostAllocator(at::kMUSA)->reset_peak_stats() instead.")
+inline void CachingHostAllocator_resetPeakStats() {
+  getHostAllocator(at::kMUSA)->reset_peak_stats();
+}
 
 } // namespace at::musa
 

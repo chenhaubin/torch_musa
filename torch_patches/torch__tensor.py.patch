@@ -1,0 +1,13 @@
+diff --git a/torch/_tensor.py b/torch/_tensor.py
+index 6cebed2..f54b782 100644
+--- a/torch/_tensor.py
++++ b/torch/_tensor.py
+@@ -1802,7 +1802,7 @@ class Tensor(torch._C.TensorBase):
+             device_type = DLDeviceType.kDLCPU
+         elif torch_device_type == "xpu":
+             device_type = DLDeviceType.kDLOneAPI
+-        elif self.device.type == "privateuse1":
++        elif self.device.type == torch._C._get_privateuse1_backend_name():
+             device_type = DLDeviceType.kDLExtDev
+         elif torch_device_type == "xla":
+             import torch_xla

@@ -3,8 +3,24 @@
 
 #include <mublas.h>
 #include <musolver.h>
+#include <musparse.h>
 
 #include "torch_musa/csrc/core/MUSAException.h"
+
+const char* musparseGetErrorString(musparseStatus_t status);
+
+namespace at::native {
+#define TORCH_MUSASPARSE_CHECK(EXPR)      \
+  do {                                    \
+    musparseStatus_t __err = EXPR;        \
+    TORCH_CHECK(                          \
+        __err == MUSPARSE_STATUS_SUCCESS, \
+        "CUDA error: ",                   \
+        musparseGetErrorString(__err),    \
+        " when calling `" #EXPR "`");     \
+  } while (0)
+
+} // namespace at::native
 
 namespace at {
 namespace musa {

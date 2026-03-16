@@ -1,21 +1,35 @@
 diff --git a/torch/_inductor/codegen/common.py b/torch/_inductor/codegen/common.py
-index 152d2ef..558285d 100644
+index 9802358..f440916 100644
 --- a/torch/_inductor/codegen/common.py
 +++ b/torch/_inductor/codegen/common.py
-@@ -447,16 +447,8 @@ def init_backend_registration() -> None:
+@@ -577,18 +577,20 @@ def init_backend_registration() -> None:
          from torch.utils.backend_registration import _get_custom_mod_func
  
          try:
 -            device_scheduling = _get_custom_mod_func("Scheduling")
 -            wrapper_codegen = _get_custom_mod_func("PythonWrapperCodegen")
 -            cpp_wrapper_codegen = _get_custom_mod_func("CppWrapperCodegen")
+-            fx_wrapper_codegen = _get_custom_mod_func("WrapperFxCodegen")
 -            if device_scheduling and wrapper_codegen and cpp_wrapper_codegen:
 -                register_backend_for_device(
 -                    private_backend,
 -                    device_scheduling,
 -                    wrapper_codegen,
 -                    cpp_wrapper_codegen,
+-                    fx_wrapper_codegen,
 -                )
++            # device_scheduling = _get_custom_mod_func("Scheduling")
++            # wrapper_codegen = _get_custom_mod_func("PythonWrapperCodegen")
++            # cpp_wrapper_codegen = _get_custom_mod_func("CppWrapperCodegen")
++            # fx_wrapper_codegen = _get_custom_mod_func("WrapperFxCodegen")
++            # if device_scheduling and wrapper_codegen and cpp_wrapper_codegen:
++            #     register_backend_for_device(
++            #         private_backend,
++            #         device_scheduling,
++            #         wrapper_codegen,
++            #         cpp_wrapper_codegen,
++            #         fx_wrapper_codegen,
++            #     )
 +            register_func = _get_custom_mod_func("_init_inductor_backend_registration")
 +            register_func()
          except RuntimeError:

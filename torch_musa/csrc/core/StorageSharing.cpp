@@ -60,32 +60,26 @@ static PyObject* THMPStorageReleaseIPCCounter(
   END_HANDLE_TH_ERRORS
 }
 
-static PyObject* THMPStorageShareMusa(
-    PyObject* _self,
-    PyObject* args,
-    PyObject* kwargs) {
+static PyObject* THMPStorageShareMusa(PyObject* self, PyObject* arg) {
   HANDLE_TH_ERRORS
-  static torch::PythonArgParser parser({"_share_musa_(Storage temp)"});
-  torch::ParsedArgs<1> parsed_args;
-  auto r = parser.parse(args, kwargs, parsed_args);
-  auto self = r.storage(0);
+  THPStorage_assertNotNull(self);
+  const auto& storage = THPStorage_Unpack(arg);
   TORCH_CHECK(
-      self.device_type() == at::musa::kMUSA,
-      "_share_musa_: only available on MUSA, but now ",
-      self.device());
-  c10::StorageImpl* storage = self.unsafeGetStorageImpl();
+      storage.device_type() == at::musa::kMUSA,
+      "_share_musa_: only available on MUSA");
+  c10::StorageImpl* storage_impl = storage.unsafeGetStorageImpl();
 
-  if (storage->received_cuda()) {
-    AT_ERROR(
+  if (storage_impl->received_cuda()) {
+    TORCH_CHECK(
         "Attempted to send MUSA tensor received from another process; this is not currently supported. Consider cloning before sending.");
   }
 
-  at::DeviceGuard device_guard(storage->device());
+  at::DeviceGuard device_guard(storage.device());
   THPObjectPtr tuple(PyTuple_New(8));
-  THPObjectPtr device(THPUtils_packInt32(storage->device().index()));
+  THPObjectPtr device(THPUtils_packInt32(storage.device().index()));
   THPObjectPtr _handle(Py_None);
   Py_INCREF(Py_None);
-  THPObjectPtr size_bytes(THPUtils_packUInt64(storage->nbytes()));
+  THPObjectPtr size_bytes(THPUtils_packUInt64(storage.nbytes()));
   THPObjectPtr _offset_bytes(THPUtils_packInt32(0));
   THPObjectPtr _ref_counter(Py_None);
   Py_INCREF(Py_None);
@@ -94,9 +88,9 @@ static PyObject* THMPStorageShareMusa(
   Py_INCREF(Py_None);
   THPObjectPtr _event_sync_required(Py_None);
   Py_INCREF(Py_None);
-  if (storage->data()) {
-    auto shandle = c10::musa::MUSACachingAllocator::shareIpcHandle(
-        storage->mutable_data());
+  if (storage.data()) {
+    auto shandle =
+        c10::musa::MUSACachingAllocator::shareIpcHandle(storage.mutable_data());
     _handle = PyBytes_FromStringAndSize(
         shandle.handle.c_str(), (Py_ssize_t)shandle.handle.size());
     _offset_bytes = PyLong_FromSsize_t((Py_ssize_t)shandle.offset);
@@ -104,10 +98,10 @@ static PyObject* THMPStorageShareMusa(
     // Put Storage Data behind new ref counting context
     // See Note [MUSA IPC Refcounting implementation explained]
     at::DataPtr sent_data_ptr = torch::musa::GetNewRefCountedSentData(
-        storage->mutable_data(), storage->device());
-    auto old_data_ptr = storage->set_data_ptr(std::move(sent_data_ptr));
+        storage.mutable_data(), storage.device());
+    auto old_data_ptr = storage.set_data_ptr(std::move(sent_data_ptr));
     auto sent_data = static_cast<torch::musa::MusaIPCSentData*>(
-        storage->data_ptr().get_context());
+        storage.data_ptr().get_context());
     sent_data->set_original_ptr(std::move(old_data_ptr));
     _ref_counter = PyBytes_FromString((sent_data->handle()).c_str());
     _ref_counter_offset = THPUtils_packUInt64(sent_data->offset());
@@ -191,9 +185,8 @@ static PyObject* THMPStorageNewSharedMusa(PyObject* _unused, PyObject* args) {
     }
     auto ipc_event_handle = reinterpret_cast<const musaIpcEventHandle_t*>(
         s_ipc_event_handle.c_str());
-    // NOLINTNEXTLINE(cppcoreguidelines-init-variables)
     musaEvent_t event;
-    musaIpcOpenEventHandle(&event, *ipc_event_handle);
+    C10_MUSA_CHECK(musaIpcOpenEventHandle(&event, *ipc_event_handle));
     C10_MUSA_CHECK(
         musaStreamWaitEvent(c10::musa::getCurrentMUSAStream(device), event, 0));
   }
@@ -280,10 +273,7 @@ static PyObject* THMPStorageNewSharedMusa(PyObject* _unused, PyObject* args) {
   base->set_resizable(false);
   base->set_received_cuda(true);
 
-  return THPStorage_NewWithStorage(
-      THPStorageClass,
-      std::move(base),
-      c10::impl::PyInterpreterStatus::TAGGED_BY_US);
+  return THPStorage_NewWithStorage(THPStorageClass, std::move(base));
   END_HANDLE_TH_ERRORS
 }
 
@@ -307,11 +297,22 @@ static PyObject* THMPStorageEditDevice(PyObject* _self, PyObject* args) {
   END_HANDLE_TH_ERRORS
 }
 
+static PyObject* THMPStorageNewWithWeakPtr(PyObject* _unused, PyObject* arg) {
+  HANDLE_TH_ERRORS
+  TORCH_CHECK(
+      THPUtils_checkLong(arg), "_new_with_weak_ptr(): arg must be an 'int'");
+  c10::StorageImpl* weak_storage = (c10::StorageImpl*)PyLong_AsVoidPtr(arg);
+  if (auto* storage = c10::raw::weak_intrusive_ptr::lock(weak_storage)) {
+    return THPStorage_Wrap(
+        c10::intrusive_ptr<c10::StorageImpl>::reclaim(storage));
+  }
+  Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
+}
+
 static PyMethodDef THMPStorageSharingMethods[] = {
-    {"_share_musa_",
-     castPyCFunctionWithKeywords(THMPStorageShareMusa),
-     METH_VARARGS | METH_KEYWORDS,
-     nullptr},
+    {"_new_with_weak_ptr", THMPStorageNewWithWeakPtr, METH_O, nullptr},
+    {"_share_musa_", THMPStorageShareMusa, METH_O, nullptr},
     {"_new_shared_musa", THMPStorageNewSharedMusa, METH_VARARGS, nullptr},
     {"_release_ipc_counter_musa",
      THMPStorageReleaseIPCCounter,

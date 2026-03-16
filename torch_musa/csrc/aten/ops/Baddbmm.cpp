@@ -66,7 +66,8 @@ Tensor& BaddbmmOutImpl(
 
   ::musa::dnn::BatchMatMul bmm;
   CHECK_MUDNN_STATUS(
-      bmm.SetComputeMode(at::musa::GetComputeModeFromCtx(out.scalar_type())),
+      bmm.SetComputeMode(
+          at::musa::GetMatmulComputeModeFromCtx(out.scalar_type())),
       "SetComputeMode");
   CHECK_MUDNN_STATUS(bmm.SetTranspose(trans_b1, trans_b2), "SetTranspose");
 

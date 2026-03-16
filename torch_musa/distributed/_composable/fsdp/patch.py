@@ -1,6 +1,6 @@
 """Patches for FSDP2 module"""
 
-# pylint: disable=W0613,C0301,E1121,C0415,C0103
+# pylint: disable=W0613,C0301,E1121,C0415,C0103,W0611
 
 from typing import (
     Optional,
@@ -218,13 +218,14 @@ def _setup_fsdp2_patches():
             "The overlapping of FSDP2 was disabled on musa arch older than mp_31"
         )
 
-    if _FSDP2_OVERLAP_LEVEL == FSDP2OverlapLevel.NO_OVERLAP:
-        #
-        torch.distributed.fsdp._fully_shard._fsdp_collectives.foreach_all_gather.__code__ = (
-            foreach_all_gather_non_overlap.__code__
-        )
-        FSDPParamGroup.wait_for_unshard = wait_for_unshard_non_overlap
-        FSDPParamGroup.post_backward = post_backward_non_overlap
+    # TODO(@mingyuan.wang): API changed in PT29
+    # if _FSDP2_OVERLAP_LEVEL == FSDP2OverlapLevel.NO_OVERLAP:
+    #     #
+    #     torch.distributed.fsdp._fully_shard._fsdp_collectives.foreach_all_gather.__code__ = (
+    #         foreach_all_gather_non_overlap.__code__
+    #     )
+    #     FSDPParamGroup.wait_for_unshard = wait_for_unshard_non_overlap
+    #     FSDPParamGroup.post_backward = post_backward_non_overlap
 
 
 def monkey_patched_fully_shard(fully_shard_func):

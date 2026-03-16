@@ -11,6 +11,7 @@ end = [0, 10, 20]
 step = [1, 2]
 if testing.get_musa_arch() >= 22:
     dtype_list = [
+        torch.float64,
         torch.float32,
         torch.int32,
         torch.int64,

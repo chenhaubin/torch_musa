@@ -12,6 +12,7 @@
 
 #include "torch_musa/csrc/aten/musa/Exceptions.h"
 #include "torch_musa/csrc/aten/musa/MUSAContextLight.h"
+#include "torch_musa/csrc/aten/ops/musa/unimplemented_functions.h"
 #include "torch_musa/csrc/core/MUSAFunctions.h"
 #include "torch_musa/csrc/core/MUSAHooksInterface.h"
 #include "torch_musa/csrc/core/MUSAStream.h"

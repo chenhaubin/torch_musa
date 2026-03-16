@@ -37,7 +37,7 @@ Tensor empty_musa(
     c10::optional<Device> device_opt,
     c10::optional<bool> pin_memory_opt,
     c10::optional<c10::MemoryFormat> memory_format_opt) {
-  at::musa::lazyInitMUSA();
+  at::globalContext().lazyInitDevice(at::musa::kMUSA);
   if (layout_opt.has_value()) {
     LOG(INFO) << "layout_opt is invalid in empty_musa";
   }
@@ -73,7 +73,7 @@ Tensor empty_strided_musa(
     c10::optional<Layout> layout_opt,
     c10::optional<Device> device_opt,
     c10::optional<bool> pin_memory_opt) {
-  at::musa::lazyInitMUSA();
+  at::globalContext().lazyInitDevice(at::musa::kMUSA);
   check_size_nonnegative(size);
 
   TORCH_CHECK(
@@ -111,7 +111,7 @@ TensorBase empty_strided_musa(
     IntArrayRef stride,
     ScalarType dtype,
     std::optional<Device> device_opt) {
-  at::musa::lazyInitMUSA();
+  at::globalContext().lazyInitDevice(at::musa::kMUSA);
   const auto device = device_or_default(device_opt);
   TORCH_INTERNAL_ASSERT(device.is_privateuseone());
   const DeviceGuard device_guard(device);
@@ -143,7 +143,7 @@ void resize_bytes_musa(StorageImpl* storage, size_t size_bytes) {
   at::DataPtr data = allocator->allocate(size_bytes);
   if (storage->data_ptr()) {
     // Enable p2p access when the memcpy is across devices
-    at::musa::lazyInitMUSA();
+    at::globalContext().lazyInitDevice(at::musa::kMUSA);
 
     // Is there cross device copy scenario ?
     // at::musa::get_p2p_access(device, device.index());

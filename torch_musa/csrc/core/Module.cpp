@@ -1,6 +1,7 @@
 #include <ATen/Parallel.h>
 #include <ATen/Utils.h>
 #include <ATen/autocast_mode.h>
+#include <ATen/core/CachingHostAllocator.h>
 #include <c10/core/ScalarTypeToTypeMeta.h>
 #include <c10/util/Backtrace.h>
 #include <pybind11/pybind11.h>
@@ -72,24 +73,19 @@ static void poison_fork() {
  */
 void THCPGraph_init(PyObject* module);
 
-void AddPyMethodDefs(std::vector<PyMethodDef>& vector, PyMethodDef* methods) {
-  if (!vector.empty()) {
-    // remove nullptr terminator
-    vector.pop_back();
-  }
-  while (true) {
-    vector.push_back(*methods);
-    if (!methods->ml_name) {
-      break;
-    }
-    methods++;
-  }
-}
-
 PyObject* PyMusaEmptyCache(PyObject* unused0, PyObject* unused1) {
   HANDLE_TH_ERRORS {
     pybind11::gil_scoped_release no_gil;
     c10::musa::MUSACachingAllocator::emptyCache();
+  }
+  END_HANDLE_TH_ERRORS
+  Py_RETURN_NONE;
+}
+
+PyObject* PyMusaHostEmptyCache(PyObject* _unused, PyObject* noargs) {
+  HANDLE_TH_ERRORS {
+    pybind11::gil_scoped_release no_gil;
+    at::getHostAllocator(at::kMUSA)->empty_cache();
   }
   END_HANDLE_TH_ERRORS
   Py_RETURN_NONE;
@@ -407,7 +403,7 @@ PyObject* PyMusaAttachOutOfMemoryObserver(
     }
     Py_XDECREF(result);
   };
-  at::musa::lazyInitMUSA();
+  at::globalContext().lazyInitDevice(at::musa::kMUSA);
   c10::musa::MUSACachingAllocator::attachOutOfMemoryObserver(std::move(obs));
   Py_RETURN_NONE;
   END_HANDLE_TH_ERRORS
@@ -550,7 +546,7 @@ static PyObject* PyMusaInitExtension(
   HANDLE_TH_ERRORS
   TORCH_INTERNAL_ASSERT(!in_bad_fork); // Handled at python level
   poison_fork();
-  at::musa::lazyInitMUSA();
+  at::globalContext().lazyInitDevice(at::musa::kMUSA);
 
   auto m = THPObjectPtr(PyImport_ImportModule("torch_musa"));
   if (!m)
@@ -949,6 +945,7 @@ at::MemoryFormat DetermineBackendMemoryFormat(
 
 static PyMethodDef MusaMemoryMethods[] = {
     {"_musa_emptyCache", PyMusaEmptyCache, METH_NOARGS, nullptr},
+    {"_host_emptyCache", PyMusaHostEmptyCache, METH_NOARGS, nullptr},
     {"_musa_memoryStats", PyMusaMemoryStats, METH_O, nullptr},
     {"_musa_resetAccumulatedMemoryStats",
      PyMusaResetAccumulatedMemoryStats,
@@ -1384,6 +1381,14 @@ static void RegisterMUSAPluggableAllocator(PyObject* module) {
     c10::musa::MUSACachingAllocator::raw_delete(data_ptr);
   });
 
+  m.def(
+      "_set_storage_data_ptr_access_error_msg",
+      [](size_t storage_impl_ptr, std::string s) {
+        // NOLINTNEXTLINE(performance-no-int-to-ptr)
+        c10::StorageImpl* storage_impl = (c10::StorageImpl*)storage_impl_ptr;
+        storage_impl->release_data_and_set_meta_custom_data_ptr_error_msg_(s);
+      });
+
   // The interfaces above is a minimum set that enables Pluggable Allocator.
   // There are some other "cuda_graph_tree" related interfaces in the
   // torch/csrc/cuda/Module.cpp file that we should adapt in the future.
@@ -1408,7 +1413,7 @@ static void RegisterMemPool(PyObject* module) {
           "activate_pool", &c10::musa::MemPoolContext::getActiveMemPool);
 }
 
-PyObject* module;
+static PyObject* module;
 static std::vector<PyMethodDef> methods;
 
 namespace torch::musa {
@@ -1421,19 +1426,24 @@ PyObject* InitMusaModule() {
   // Initialize some Python bindings.
   torch::musa::InitializePythonBindings();
 
-  AddPyMethodDefs(methods, torch::musa::GetTensorMethods());
-  AddPyMethodDefs(methods, GetStorageSharingMethods());
-  AddPyMethodDefs(methods, MusaDeviceMethods);
-  AddPyMethodDefs(methods, MusaStreamMethods);
-  AddPyMethodDefs(methods, MusaMemoryMethods);
-  AddPyMethodDefs(methods, at::musa::GetContextMethods());
-  AddPyMethodDefs(methods, DynamoMethods);
-  AddPyMethodDefs(methods, MCCLMethods);
-  AddPyMethodDefs(methods, MUSAContextMethods);
+#define ASSERT_TRUE(cmd) \
+  if (!(cmd))            \
+  return nullptr
+
+  THPUtils_addPyMethodDefs(methods, torch::musa::GetTensorMethods());
+  THPUtils_addPyMethodDefs(methods, GetStorageSharingMethods());
+  THPUtils_addPyMethodDefs(methods, MusaDeviceMethods);
+  THPUtils_addPyMethodDefs(methods, MusaStreamMethods);
+  THPUtils_addPyMethodDefs(methods, MusaMemoryMethods);
+  THPUtils_addPyMethodDefs(methods, at::musa::GetContextMethods());
+  THPUtils_addPyMethodDefs(methods, DynamoMethods);
+  THPUtils_addPyMethodDefs(methods, MCCLMethods);
+  THPUtils_addPyMethodDefs(methods, MUSAContextMethods);
 
   static struct PyModuleDef musa_module = {
       PyModuleDef_HEAD_INIT, "torch_musa._MUSAC", nullptr, -1, methods.data()};
   module = PyModule_Create(&musa_module);
+  ASSERT_TRUE(module);
 
   THMPStream_init(module);
   THMPEvent_init(module);

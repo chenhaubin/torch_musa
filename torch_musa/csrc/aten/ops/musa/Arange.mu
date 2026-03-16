@@ -18,7 +18,7 @@ namespace native {
 namespace {
 
 template <typename T>
-__global__ void arange_kernel(T* out_ptr, T start, T step, int nthreads) {
+__global__ void arange_kernel(T* out_ptr, T start, T step, int numel) {
   typedef typename at::musa::Dtype<T>::Vec4 vec4;
   int global_stride = blockDim.x * gridDim.x;
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -26,8 +26,8 @@ __global__ void arange_kernel(T* out_ptr, T start, T step, int nthreads) {
   vec4* out_vec4_ptr = (vec4*)(out_ptr);
   vec4 vec_o;
 
-  while (vec_idx < nthreads) {
-    if (vec_idx + 4 <= nthreads) {
+  while (vec_idx < numel) {
+    if (vec_idx + 4 <= numel) {
       vec_o.x = start + static_cast<T>(vec_idx + 0) * step;
       vec_o.y = start + static_cast<T>(vec_idx + 1) * step;
       vec_o.z = start + static_cast<T>(vec_idx + 2) * step;
@@ -36,7 +36,7 @@ __global__ void arange_kernel(T* out_ptr, T start, T step, int nthreads) {
       out_vec4_ptr[idx] = vec_o;
 
     } else {
-      for (int i = vec_idx; i < nthreads; ++i) {
+      for (int i = vec_idx; i < numel; ++i) {
         out_ptr[i] = start + static_cast<T>(i) * step;
       }
     }
@@ -47,7 +47,8 @@ __global__ void arange_kernel(T* out_ptr, T start, T step, int nthreads) {
 
 void CheckParams(double start, double end, double step, Tensor& out) {
   TORCH_CHECK(
-      out.scalar_type() == at::ScalarType::Float ||
+      out.scalar_type() == at::ScalarType::Double ||
+          out.scalar_type() == at::ScalarType::Float ||
           out.scalar_type() == at::ScalarType::Int ||
           out.scalar_type() == at::ScalarType::Long ||
           out.scalar_type() == at::ScalarType::Half ||
@@ -84,45 +85,52 @@ void launch(
     const Tensor& out,
     const Scalar& start,
     const Scalar& step,
-    const int nthreads,
+    const int numel,
     const int nr_block,
     const int thread_per_block) {
   auto stream = c10::musa::getCurrentMUSAStream();
   switch (out.scalar_type()) {
+    case at::ScalarType::Double:
+      arange_kernel<double><<<nr_block, thread_per_block, 0, stream>>>(
+          static_cast<double*>(out.data_ptr()),
+          start.toDouble(),
+          step.toDouble(),
+          numel);
+      break;
     case at::ScalarType::Float:
       arange_kernel<float><<<nr_block, thread_per_block, 0, stream>>>(
           static_cast<float*>(out.data_ptr()),
           start.toFloat(),
           step.toFloat(),
-          nthreads);
+          numel);
       break;
     case at::ScalarType::Half:
       arange_kernel<float16_t><<<nr_block, thread_per_block, 0, stream>>>(
           static_cast<float16_t*>(out.data_ptr()),
           static_cast<float16_t>(start.toFloat()),
           static_cast<float16_t>(step.toFloat()),
-          nthreads);
+          numel);
       break;
     case at::ScalarType::BFloat16:
       arange_kernel<bfloat16_t><<<nr_block, thread_per_block, 0, stream>>>(
           static_cast<bfloat16_t*>(out.data_ptr()),
           static_cast<bfloat16_t>(start.toFloat()),
           static_cast<bfloat16_t>(step.toFloat()),
-          nthreads);
+          numel);
       break;
     case at::ScalarType::Int:
       arange_kernel<int32_t><<<nr_block, thread_per_block, 0, stream>>>(
           static_cast<int32_t*>(out.data_ptr()),
           start.toInt(),
           step.toInt(),
-          nthreads);
+          numel);
       break;
     case at::ScalarType::Long:
       arange_kernel<int64_t><<<nr_block, thread_per_block, 0, stream>>>(
           static_cast<int64_t*>(out.data_ptr()),
           start.toLong(),
           step.toLong(),
-          nthreads);
+          numel);
       break;
     default:
       TORCH_CHECK(false, "unsupported data type (", out.scalar_type(), ")");
@@ -135,17 +143,7 @@ void ArangeRun(
     const Scalar& end,
     const Scalar& step,
     Tensor& out) {
-  if (out.scalar_type() == at::ScalarType::Float ||
-      out.scalar_type() == at::ScalarType::Half ||
-      out.scalar_type() == at::ScalarType::BFloat16) {
-    CheckParams(start.toDouble(), end.toDouble(), step.toDouble(), out);
-  } else {
-    CheckParams(
-        static_cast<double>(start.toLong()),
-        static_cast<double>(end.toLong()),
-        static_cast<double>(step.toLong()),
-        out);
-  }
+  CheckParams(start.toDouble(), end.toDouble(), step.toDouble(), out);
   int out_numel = out.numel();
   if (out_numel == 0) {
     return;

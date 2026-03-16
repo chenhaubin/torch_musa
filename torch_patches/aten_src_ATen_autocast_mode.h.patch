@@ -7,10 +7,10 @@ index ec30eb6..34ddb38 100644
    return (
        arg.defined() && is_autocast_eligible(arg, device_type) &&
 -      (arg.scalar_type() != at::kDouble));
-+      ((device_type != c10::DeviceType::PrivateUse1) ? 
-+        (arg.scalar_type() != at::kDouble) : 
++      ((device_type != c10::DeviceType::PrivateUse1) ?
++        (arg.scalar_type() != at::kDouble) :
 +          true)
 +  );
  }
- 
+
  // Overload to catch Tensor args

@@ -33,7 +33,7 @@ void initAOTIMUSARunnerBindings(PyObject* module) {
       .def(
           "update_constant_buffer",
           static_cast<void (AOTIModelContainerRunnerMusa::*)(
-              std::unordered_map<std::string, at::Tensor>&, bool, bool)>(
+              std::unordered_map<std::string, at::Tensor>&, bool, bool, bool)>(
               &AOTIModelContainerRunnerMusa::update_constant_buffer));
 }
 } // namespace torch::inductor

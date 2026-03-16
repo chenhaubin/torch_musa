@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.27)
 
 project(op_subproject LANGUAGES CXX)
 
@@ -48,7 +48,14 @@ file(
   ${GENERATED_PORTING_DIR}/aten/src/ATen/native/musa/TensorModeKernel.cpp
   ${GENERATED_PORTING_DIR}/aten/src/ATen/native/quantized/FakeQuantPerChannelAffine.cpp
   ${GENERATED_PORTING_DIR}/aten/src/ATen/native/quantized/FakeQuantPerTensorAffine.cpp
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/native/sparse/musa/SparseMUSABlas.cpp
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/native/sparse/musa/SparseBlasLegacy.cpp
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/native/sparse/musa/SparseTensorMath.cpp
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/native/sparse/musa/SparseTensor.cpp
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/CuSparseHandlePool.cpp
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/native/sparse/musa/SparseBlasImpl.cpp
   ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/EmptyTensor.cpp
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/MUSASparseBlas.cpp
   ${GENERATED_PORTING_DIR}/torch/csrc/musa/comm.cpp
   ${GENERATED_PORTING_DIR}/torch/csrc/musa/Stream.cpp
   ${GENERATED_PORTING_DIR}/torch/csrc/musa/Distributions.cpp
@@ -60,7 +67,17 @@ file(
   MU_SRCS
   ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/cub.mu
   ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/cub-RadixSortKeys.mu
-  ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/cub-RadixSortPairs.mu
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/cub-RadixSortPairs-f16-8.mu
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/cub-RadixSortPairs-int32-1.mu
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/cub-RadixSortPairs-int32-2.mu
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/cub-RadixSortPairs-int32-4.mu
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/cub-RadixSortPairs-int64-1.mu
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/cub-RadixSortPairs-int64-2.mu
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/cub-RadixSortPairs-int64-4.mu
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/cub-RadixSortPairs-scalars.mu
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/cub-RadixSortPairs-uint16-8.mu
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/cub-RadixSortPairs-uint32-8.mu
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/cub-RadixSortPairs-uint64-8.mu
   ${GENERATED_PORTING_DIR}/aten/src/ATen/musa/detail/IndexUtils.mu
   ${GENERATED_PORTING_DIR}/aten/src/ATen/native/musa/airy_ai.mu
   ${GENERATED_PORTING_DIR}/aten/src/ATen/native/musa/bessel_j0.mu
@@ -177,7 +194,11 @@ file(
   ${GENERATED_PORTING_DIR}/aten/src/ATen/native/quantized/musa/MakePerTensorQuantizedTensor.mu
   ${GENERATED_PORTING_DIR}/aten/src/ATen/native/quantized/musa/FusedObsFakeQuant.mu
   ${GENERATED_PORTING_DIR}/aten/src/ATen/native/quantized/musa/FakeQuantizeCore.mu
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/native/sparse/musa/SparseMatMul.mu
   ${GENERATED_PORTING_DIR}/aten/src/ATen/native/sparse/musa/SparseMUSATensor.mu
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/native/sparse/musa/SparseCsrTensorMath.mu
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/native/sparse/musa/SparseMUSATensorMath.mu
+  ${GENERATED_PORTING_DIR}/aten/src/ATen/native/musa/FlattenIndicesKernel.mu
   aten/quantized/musa/*.mu
   aten/ops/musa/*.mu
   aten/ops/attention/mudnn/*.mu

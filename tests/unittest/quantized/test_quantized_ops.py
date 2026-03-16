@@ -750,8 +750,9 @@ configs = [
 
 
 @pytest.mark.parametrize("config", configs)
+@pytest.mark.parametrize("input_type", [torch.int8, torch.uint8])
 @pytest.mark.parametrize("dtype", [torch.uint8, torch.float32])
-def test_run_linear_vs_onednn(config, dtype):
+def test_run_linear_vs_onednn(config, input_type, dtype):
     shape1, shape2 = config
     test = testing.OpTest(
         func=torch.ops.quantized.linear_per_tensor,
@@ -759,7 +760,7 @@ def test_run_linear_vs_onednn(config, dtype):
         input_args={},
     )
 
-    act = get_intinput_tensor(shape1, torch.int8)
+    act = get_intinput_tensor(shape1, input_type)
     weight = get_intinput_tensor(shape2, torch.int8)
 
     act_scale = 1.0
@@ -810,6 +811,7 @@ configs = [
     [
         (torch.float32, "none"),
         (torch.float32, "relu"),
+        (torch.uint8, "relu"),
     ],
 )
 @pytest.mark.parametrize("config", configs)

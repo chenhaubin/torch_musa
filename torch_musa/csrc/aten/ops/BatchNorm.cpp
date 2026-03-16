@@ -86,8 +86,16 @@ std::tuple<Tensor&, Tensor&, Tensor&> NativeBatchNormOut(
   auto rm = vector_to_mutensor(running_mean_opt, stat_dtype);
   auto rv = vector_to_mutensor(running_var_opt, stat_dtype);
 
-  auto m = vector_to_mutensor(save_mean, stat_dtype);
-  auto v = vector_to_mutensor(save_invstd, stat_dtype);
+  auto m = CreateEmptyMUTensor();
+  auto v = CreateEmptyMUTensor();
+
+  if (training) {
+    int64_t n_input = input.size(1);
+    save_mean.resize_({n_input});
+    save_invstd.resize_({n_input});
+    m = vector_to_mutensor(save_mean, stat_dtype);
+    v = vector_to_mutensor(save_invstd, stat_dtype);
+  }
 
   const auto input_memory_format = input.suggest_memory_format();
   Tensor contig_input = FormatContiguous(input.alias(), input_memory_format);
@@ -139,8 +147,8 @@ std::tuple<Tensor, Tensor, Tensor> NativeBatchNorm(
       ? running_mean_opt->scalar_type()
       : at::toAccumulateType(self.scalar_type(), /*is_cuda=*/true);
   auto options = self.options().dtype(save_mean_var_dtype);
-  auto save_mean = at::empty({n_input}, options);
-  auto save_invstd = at::empty({n_input}, options);
+  auto save_mean = at::empty({0}, options);
+  auto save_invstd = at::empty({0}, options);
 
   NativeBatchNormOut(
       self,
@@ -350,25 +358,27 @@ std::tuple<Tensor, Tensor, Tensor> NativeBatchNormBwd(
       at::borrow_from_optional_tensor(running_mean_opt);
   c10::MaybeOwned<Tensor> running_var =
       at::borrow_from_optional_tensor(running_var_opt);
-  const bool needs_reduction = train || output_mask[1] || output_mask[2];
   Tensor mean;
   TORCH_INTERNAL_ASSERT(
       save_mean->defined(), "save_mean should always be defined\n");
-  if (save_mean->numel() != 0) {
-    mean = *save_mean;
-  } else if (needs_reduction) {
-    TORCH_CHECK(!train && running_mean->defined());
+  if (!train) {
+    TORCH_CHECK(
+        running_mean->defined(),
+        "running_mean should be defined in train=False\n");
     mean = *running_mean;
+  } else if (save_mean->numel() != 0) {
+    mean = *save_mean;
   }
   Tensor invstd;
   TORCH_INTERNAL_ASSERT(
       save_invstd->defined(), "save_invstd should always be defined\n");
-  if (save_invstd->numel() != 0) {
-    invstd = *save_invstd;
-  } else {
-    TORCH_CHECK(!train && running_var->defined());
-    auto n_channels = input.sizes()[1];
+  if (!train) {
+    TORCH_CHECK(
+        running_var->defined(),
+        "running_var should be defined in train=False\n");
     invstd = *running_var;
+  } else if (save_invstd->numel() != 0) {
+    invstd = *save_invstd;
   }
 
   Tensor grad_input;

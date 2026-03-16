@@ -194,6 +194,27 @@ static inline __device__ void gpuAtomicAdd(bool* address, bool val) {
       address, val, [](bool a, bool b) { return a || b; });
 }
 
+template <typename scalar_t>
+__device__ __forceinline__ void gpuAtomicAddComplex(
+    scalar_t* ptr,
+    scalar_t val);
+
+template <>
+__device__ __forceinline__ void gpuAtomicAddComplex<c10::complex<float>>(
+    c10::complex<float>* ptr,
+    c10::complex<float> val) {
+  atomicAdd(&(reinterpret_cast<float*>(ptr)[0]), val.real());
+  atomicAdd(&(reinterpret_cast<float*>(ptr)[1]), val.imag());
+}
+
+template <>
+__device__ __forceinline__ void gpuAtomicAddComplex<c10::complex<double>>(
+    c10::complex<double>* ptr,
+    c10::complex<double> val) {
+  atomicAdd(&(reinterpret_cast<double*>(ptr)[0]), val.real());
+  atomicAdd(&(reinterpret_cast<double*>(ptr)[1]), val.imag());
+}
+
 } // namespace musa
 } // namespace at
 #endif // ATEN_MUSA_MUSA_ATOMIC_H_

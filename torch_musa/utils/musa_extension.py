@@ -1,6 +1,6 @@
 """The musa extension file"""
 
-# pylint: disable=E1120,W0613,C0103,W9015,W9016
+# pylint: disable=E1120,W0613,C0103,W9015,W9016,C0116
 
 import copy
 import multiprocessing
@@ -32,7 +32,6 @@ from torch.utils.cpp_extension import (
     remove_extension_h_precompiler_headers,
     JIT_EXTENSION_VERSIONER,
     _get_pybind11_abi_build_flags,
-    _get_glibcxx_abi_build_flags,
     SHARED_FLAG,
     TORCH_LIB_PATH,
 )
@@ -585,13 +584,16 @@ class BuildExtension(build_ext):
                         extension.extra_compile_args[ext] = []
 
             self._add_compile_flag(extension, "-DTORCH_API_INCLUDE_EXTENSION_H")
-            # See note [Pybind11 ABI constants]
-            for name in ["COMPILER_TYPE", "STDLIB", "BUILD_ABI"]:
-                val = getattr(torch._C, f"_PYBIND11_{name}")
-                if val is not None:
-                    self._add_compile_flag(extension, f'-DPYBIND11_{name}="{val}"')
+
+            if extension.py_limited_api:
+                # compile any extension that has passed in py_limited_api to the
+                # Extension constructor with the Py_LIMITED_API flag set to our
+                # min supported CPython version.
+                # See https://docs.python.org/3/c-api/stable.html#c.Py_LIMITED_API
+                self._add_compile_flag(
+                    extension, f"-DPy_LIMITED_API={min_supported_cpython}"
+                )
             self._define_torch_extension_name(extension)
-            self._add_gnu_cpp_abi_flag(extension)
 
             if "mcc_dlink" in extension.extra_compile_args:
                 assert (
@@ -781,13 +783,6 @@ class BuildExtension(build_ext):
         define = f"-DTORCH_EXTENSION_NAME={name}"
         self._add_compile_flag(extension, define)
 
-    def _add_gnu_cpp_abi_flag(self, extension):
-        # use the same CXX ABI as what PyTorch was compiled with
-        self._add_compile_flag(
-            extension,
-            "-D_GLIBCXX_USE_CXX11_ABI=" + str(int(torch._C._GLIBCXX_USE_CXX11_ABI)),
-        )
-
 
 def _get_musa_arch_flags():
     """
@@ -887,9 +882,6 @@ def _prepare_ldflags(extra_ldflags, with_musa, verbose, is_standalone):
             "-lmusa_kernels"
         )  # TODO: aotinductor cpp impl compiled to musa_kernels.so
 
-    if is_standalone and "TBB" in torch.__config__.parallel_info():
-        extra_ldflags.append("-ltbb")
-
     if is_standalone:
         extra_ldflags.append(f"-Wl,-rpath,{TORCH_LIB_PATH}")
 
@@ -950,8 +942,6 @@ def _write_ninja_file_to_build_library(
 
     common_cflags += [f"-I{include}" for include in user_includes]
     common_cflags += [f"-isystem {include}" for include in system_includes]
-
-    common_cflags += [f"{x}" for x in _get_glibcxx_abi_build_flags()]
 
     cflags = common_cflags + ["-fPIC", "-std=c++17"] + extra_cflags
 

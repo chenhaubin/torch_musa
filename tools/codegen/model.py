@@ -6,13 +6,13 @@ from dataclasses import dataclass
 from copy import deepcopy
 from enum import auto, Enum
 from typing import Dict, Union, Iterator
+from typing_extensions import assert_never
 
 from torchgen.model import (
     DispatchKey,
     NativeFunction,
     NativeFunctionsGroup,
 )
-from torchgen.utils import assert_never
 
 MUSA_STRUCTURED_DISPATCH_KEY = DispatchKey.PrivateUse1
 MUSA_DISPATCH_KEYS = [

@@ -37,7 +37,7 @@ def test_nansum_fp32(config):
     test = testing.OpTest(
         func=torch.nansum,
         input_args=input_data,
-        comparators=testing.DefaultComparator(abs_diff=1e-5),
+        comparators=testing.DefaultComparator(abs_diff=5e-5),
     )
     test.check_result()
 

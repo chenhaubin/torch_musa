@@ -6,6 +6,7 @@ namespace at {
 namespace musa {
 namespace blas {
 
+#if defined(REAL_MUSA_VERSION) && (REAL_MUSA_VERSION < 5010)
 const char* _mublasGetErrorEnum(mublasStatus_t error) {
   switch (error) {
     case MUBLAS_STATUS_SUCCESS:
@@ -40,6 +41,34 @@ const char* _mublasGetErrorEnum(mublasStatus_t error) {
       return "<unknown>";
   }
 }
+#else
+const char* _mublasGetErrorEnum(mublasStatus_t error) {
+  switch (error) {
+    case MUBLAS_STATUS_SUCCESS:
+      return "MUBLAS_STATUS_SUCCESS";
+    case MUBLAS_STATUS_NOT_INITIALIZED:
+      return "MUBLAS_STATUS_INVALID_HANDLE";
+    case MUBLAS_STATUS_ALLOC_FAILED:
+      return "MUBLAS_STATUS_MEMORY_ERROR";
+    case MUBLAS_STATUS_INVALID_VALUE:
+      return "MUBLAS_STATUS_INVALID_VALUE";
+    case MUBLAS_STATUS_ARCH_MISMATCH:
+      return "MUBLAS_STATUS_ARCH_MISMATCH";
+    case MUBLAS_STATUS_MAPPING_ERROR:
+      return "MUBLAS_STATUS_MAPPING_ERROR";
+    case MUBLAS_STATUS_EXECUTION_FAILED:
+      return "MUBLAS_STATUS_EXECUTION_FAILED";
+    case MUBLAS_STATUS_INTERNAL_ERROR:
+      return "MUBLAS_STATUS_INTERNAL_ERROR";
+    case MUBLAS_STATUS_NOT_SUPPORTED:
+      return "MUBLAS_STATUS_NOT_SUPPORTED";
+    case MUBLAS_STATUS_LICENSE_ERROR:
+      return "MUBLAS_STATUS_LICENSE_ERROR";
+    default:
+      return "<unknown>";
+  }
+}
+#endif
 
 } // namespace blas
 

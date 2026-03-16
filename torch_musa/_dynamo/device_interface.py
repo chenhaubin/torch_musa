@@ -6,7 +6,6 @@ from torch._dynamo.device_interface import (
     DeviceInterface,
     caching_worker_current_devices,
     caching_worker_device_properties,
-    _device_t,
     register_interface_for_device,
     get_registered_device_interfaces,
 )
@@ -38,7 +37,7 @@ class MusaInterface(DeviceInterface):
             return torch.musa.current_device()
 
         @staticmethod
-        def get_device_properties(device: _device_t = None):
+        def get_device_properties(device: torch.types.Device = None):
             """return musa device properties and cache them"""
             if device is not None:
                 if isinstance(device, str):
@@ -77,7 +76,7 @@ class MusaInterface(DeviceInterface):
         return torch.musa.is_available()
 
     @staticmethod
-    def get_compute_capability(device: _device_t = None):
+    def get_compute_capability(device: torch.types.Device = None):
         major_, min_ = torch.musa.get_device_capability(device)
         return major_ * 10 + min_
 
