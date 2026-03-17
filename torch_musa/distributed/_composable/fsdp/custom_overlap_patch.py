@@ -23,12 +23,12 @@ from torch.distributed.fsdp._fully_shard._fsdp_param_group import (
     AllGatherState,
     ReduceScatterState,
 )
+from torch.distributed.utils import _apply_to_tensors
 from torch.distributed.fsdp._fully_shard._fsdp_common import TrainingState
 from torch.distributed.fsdp._fully_shard._fsdp_state import (
     FSDPState,
     FSDPCommContext,
     disable_if_config_true,
-    tree_map,
     _cast_fp_tensor,
 )
 from torch.distributed.fsdp._fully_shard._fsdp_api import (
@@ -359,7 +359,10 @@ def _pre_forward(
     if self._mp_policy.cast_forward_inputs and self._mp_policy.param_dtype:
         with torch.profiler.record_function("FSDP::cast_forward_inputs"):
             cast_fn = functools.partial(_cast_fp_tensor, self._mp_policy.param_dtype)
-            args, kwargs = tree_map(cast_fn, args), tree_map(cast_fn, kwargs)
+            args, kwargs = (
+                _apply_to_tensors(cast_fn, args),
+                _apply_to_tensors(cast_fn, kwargs),
+            )
     if self._fsdp_param_group:
         _maybe_set_mccl_collectives(self)
         args, kwargs = self._fsdp_param_group.pre_forward(module, args, kwargs)

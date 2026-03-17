@@ -2,8 +2,11 @@
 
 #include <ATen/DeviceGuard.h>
 
-#include "musa_runtime_api.h"
+#if defined(REAL_MUSA_VERSION) && (REAL_MUSA_VERSION < 5010)
 #include "musart_version.h"
+#endif
+
+#include "musa_runtime_api.h"
 #include "torch_musa/csrc/aten/musa/MUSAGeneratorImpl.h"
 #include "torch_musa/csrc/aten/ops/TensorFactory.h"
 #include "torch_musa/csrc/aten/utils/Utils.h"

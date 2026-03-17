@@ -461,7 +461,7 @@ Tensor MUSACopyFrom(
       const auto& host_tensor = is_musa(src) ? self : src;
       auto* ptr = is_musa(src) ? self.data_ptr() : src.data_ptr();
       auto* ctx = host_tensor.storage().data_ptr().get_context();
-      CachingHostAllocator_recordEvent(ptr, ctx, stream);
+      at::getHostAllocator(at::kMUSA)->record_event(ptr, ctx, stream);
     } else {
       C10_MUSA_CHECK(musaStreamSynchronize(stream));
     }

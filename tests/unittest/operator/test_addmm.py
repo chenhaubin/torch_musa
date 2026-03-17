@@ -100,6 +100,24 @@ input_data = [
         "beta": 1.2,
         "alpha": 1.7,
     },
+    {
+        # input is broadcasted
+        "input": torch.as_strided(torch.randn(1, 256), (1, 256), (0, 1), 0),
+        # mat1 is broadcasted
+        "mat1": torch.as_strided(torch.randn(1, 256), (1, 256), (0, 1), 0),
+        "mat2": torch.randn(256, 256),
+        "beta": 1,
+        "alpha": 1,
+    },
+    {
+        "input": torch.randn(1, 1),
+        # mat1 is broadcasted
+        "mat1": torch.as_strided(torch.randn(1, 256), (1, 256), (0, 1), 0),
+        # mat2 is implicitly transposed
+        "mat2": torch.as_strided(torch.randn(256, 1), (256, 1), (1, 256), 0),
+        "beta": 1,
+        "alpha": 1,
+    },
 ]
 
 

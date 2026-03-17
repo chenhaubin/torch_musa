@@ -90,7 +90,9 @@ class TestFullyShardMixedPrecisionTraining(FSDPTest):
             reduce_scatter_with_assert, self, dist.reduce_scatter_tensor, assert_fn
         )
         # No replica, set all_reduce_group to None,
-        predivide_factor, postdivide_factor = _get_gradient_divide_factors(
+        # TODO(@mingyuan.wang): _get_gradient_divide_factors returns
+        # `reduce_scatter_op`, `all_reduce_op` as well.
+        predivide_factor, postdivide_factor, _, _ = _get_gradient_divide_factors(
             self.process_group, all_reduce_group=None, reduce_dtype=param_dtype
         )
         torch.manual_seed(42 + self.rank + 1)

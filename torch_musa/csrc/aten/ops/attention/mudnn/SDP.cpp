@@ -303,6 +303,10 @@ std::tuple<Tensor, Tensor, Tensor> MuDNNMathSDPAFwd(
   if (IsNoBatchMask(mask_type) && no_batch) {
     contig_mask = contig_mask.unsqueeze(0);
   }
+  // muDNN requires the mask.dim[2] equals seq_q_len when mask.dim is 4:
+  if (contig_mask.dim() == 4 && contig_mask.size(2) == 1 && L != 1) {
+    contig_mask = contig_mask.expand({-1, -1, L, -1}).contiguous();
+  }
   auto musa_mask = CreateMUTensor(contig_mask);
 
   auto contig_output =
@@ -521,6 +525,10 @@ std::tuple<Tensor, Tensor, Tensor> MuDNNFlashSDPAFwd(
       HasMask(mask_type) ? mask->contiguous() : at::empty({0}, query_opt);
   if (IsNoBatchMask(mask_type) && no_batch) {
     contig_mask = contig_mask.unsqueeze(0);
+  }
+  // muDNN requires the mask.dim[2] equals seq_q_len when mask.dim is 4:
+  if (contig_mask.dim() == 4 && contig_mask.size(2) == 1 && L != 1) {
+    contig_mask = contig_mask.expand({-1, -1, L, -1}).contiguous();
   }
   auto musa_mask = CreateMUTensor(contig_mask);
 

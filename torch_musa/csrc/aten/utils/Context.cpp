@@ -31,12 +31,28 @@ inline bool IsTensorCoreType(const at::ScalarType& dtype) {
                         : ::musa::dnn::Convolution::ComputeMode::SCALAR;
 }
 
+::musa::dnn::Convolution::ComputeMode GetMatmulComputeModeFromCtx(
+    const at::ScalarType& dtype) {
+  auto& ctx = GlobalContext();
+  auto is_tensor_mode = ctx.GetAllowMublasTF32() || IsTensorCoreType(dtype);
+  return is_tensor_mode ? ::musa::dnn::Convolution::ComputeMode::TENSOR
+                        : ::musa::dnn::Convolution::ComputeMode::SCALAR;
+}
+
 bool Context::GetAllowTF32() const {
   return allow_tf32_;
 }
 
 void Context::SetAllowTF32(bool allow_tf32) {
   allow_tf32_ = allow_tf32;
+}
+
+bool Context::GetAllowMublasTF32() const {
+  return allow_mublas_tf32_;
+}
+
+void Context::SetAllowMublasTF32(bool allow_tf32) {
+  allow_mublas_tf32_ = allow_tf32;
 }
 
 static constexpr const auto mublas_config_var_name = "MUBLAS_WORKSPACE_CONFIG";
@@ -89,7 +105,7 @@ void Context::alertMuBLASConfigNotDeterministic() const {
 PyObject* THPModuleSetAllowTF32(PyObject* /*unused*/, PyObject* arg) {
   TORCH_CHECK(
       PyBool_Check(arg),
-      "set_allow_tf32_cublas expects a bool, "
+      "set_allow_tf32 expects a bool, "
       "but got ",
       THPUtils_typename(arg));
   at::musa::GlobalContext().SetAllowTF32(arg == Py_True);
@@ -103,9 +119,33 @@ PyObject* THPModuleGetAllowTF32(PyObject* /*_unused*/, PyObject* /*_unused*/) {
     Py_RETURN_FALSE;
 }
 
+PyObject* THPModuleSetMublasAllowTF32(PyObject* /*unused*/, PyObject* arg) {
+  TORCH_CHECK(
+      PyBool_Check(arg),
+      "set_mublas_mallow_tf32 expects a bool, "
+      "but got ",
+      THPUtils_typename(arg));
+  at::musa::GlobalContext().SetAllowMublasTF32(arg == Py_True);
+  Py_RETURN_NONE;
+}
+
+PyObject* THPModuleGetMublasAllowTF32(
+    PyObject* /*_unused*/,
+    PyObject* /*_unused*/) {
+  if (at::musa::GlobalContext().GetAllowMublasTF32())
+    Py_RETURN_TRUE;
+  else
+    Py_RETURN_FALSE;
+}
+
 static PyMethodDef ContextMethods[] = { // NOLINT
     {"_get_allow_tf32", THPModuleGetAllowTF32, METH_NOARGS, nullptr},
     {"_set_allow_tf32", THPModuleSetAllowTF32, METH_O, nullptr},
+    {"_get_mublas_allow_tf32",
+     THPModuleGetMublasAllowTF32,
+     METH_NOARGS,
+     nullptr},
+    {"_set_mublas_allow_tf32", THPModuleSetMublasAllowTF32, METH_O, nullptr},
     {nullptr, nullptr, 0, nullptr}};
 
 PyMethodDef* GetContextMethods() {

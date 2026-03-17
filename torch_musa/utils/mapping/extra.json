@@ -4,6 +4,7 @@
     "RegisterCUDADispatch": "RegisterMUSADispatch",
     "AT_CUDA_CHECK": "AT_MUSA_CHECK",
     "TORCH_CUDABLAS_CHECK": "TORCH_MUSABLAS_CHECK",
+    "TORCH_CUDASPARSE_CHECK": "TORCH_MUSASPARSE_CHECK",
     "CUDAStream": "MUSAStream",
     "CUDAGuard": "MUSAGuard",
     "CUDACachingAllocator": "MUSACachingAllocator",

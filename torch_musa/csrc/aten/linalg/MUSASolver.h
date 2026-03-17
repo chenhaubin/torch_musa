@@ -41,11 +41,11 @@ namespace at::musa::solver {
   mublasHandle_t handle, int m, int n, int k, const Dtype *A, int lda, \
       const Dtype *tau, int *lwork
 
-#define MUSASOLVER_ORGQR_ARGTYPES(Dtype)                         \
-  mublasHandle_t handle, int m, int n, int k, Dtype *A, int lda, \
+#define MUSASOLVER_ORGQR_ARGTYPES(Dtype)                               \
+  mublasHandle_t handle, int m, int n, int k, Dtype *A, const int lda, \
       const Dtype *tau, Dtype *work, int lwork, int *devInfo
 
-#define MUSASOLVER_ORMQR_BUFFERSIZE_ARGTYPES_REAL(Dtype)                       \
+#define MUSASOLVER_ORMQR_BUFFERSIZE_ARGTYPES(Dtype)                            \
   mublasHandle_t handle, const mublasSideMode_t side, mublasOperation_t trans, \
       int m, int n, int k, Dtype *A, int lda, Dtype *tau, Dtype *C, int ldc,   \
       int *lwork
@@ -218,18 +218,25 @@ void ormqr<c10::complex<double>>(
 
 #else
 template <class Dtype>
-void ormqr_buffersize(MUSASOLVER_ORMQR_BUFFERSIZE_ARGTYPES_REAL(Dtype)) {
-  static_assert(
-      false && sizeof(Dtype),
-      "at::musa::solver::ormqr_buffersize: not implemented");
+inline void ormqr_buffersize(MUSASOLVER_ORMQR_BUFFERSIZE_ARGTYPES(Dtype)) {
+  TORCH_CHECK(
+      false,
+      "musa::solver::ormqr_buffersize is not implemented for this data type.");
 }
 
 template <>
-void ormqr_buffersize<float>(MUSASOLVER_ORMQR_BUFFERSIZE_ARGTYPES_REAL(float));
+void ormqr_buffersize<float>(MUSASOLVER_ORMQR_BUFFERSIZE_ARGTYPES(float));
 
 template <>
-void ormqr_buffersize<double>(
-    MUSASOLVER_ORMQR_BUFFERSIZE_ARGTYPES_REAL(double));
+void ormqr_buffersize<double>(MUSASOLVER_ORMQR_BUFFERSIZE_ARGTYPES(double));
+
+template <>
+void ormqr_buffersize<c10::complex<float>>(
+    MUSASOLVER_ORMQR_BUFFERSIZE_ARGTYPES(c10::complex<float>));
+
+template <>
+void ormqr_buffersize<c10::complex<double>>(
+    MUSASOLVER_ORMQR_BUFFERSIZE_ARGTYPES(c10::complex<double>));
 
 template <class Dtype>
 void ormqr(MUSASOLVER_ORMQR_ARGTYPES(Dtype)) {

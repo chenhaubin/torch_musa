@@ -40,9 +40,9 @@ class TestDTensorOps(DTensorOpTestBase):
         self.mesh = self._device_mesh_plan()
         device = torch.musa.current_device()
 
-        def fused_rmsnorm_fwd_bwd(input_, normalized_shape, eps, weight):
-            output, inv_var = torch.ops.aten._fused_rmsnorm_forward(
-                input_, normalized_shape, eps, weight
+        def fused_rmsnorm_fwd_bwd(input_, normalized_shape, weight, eps):
+            output, inv_var = torch.ops.aten._fused_rms_norm(
+                input_, normalized_shape, weight, eps
             )
             grad_output = torch.ones_like(input_)
             if isinstance(input_, DTensor):
@@ -51,8 +51,13 @@ class TestDTensorOps(DTensorOpTestBase):
                     device_mesh=input_.device_mesh,
                     placements=input_.placements,
                 )
-            grad_input, grad_weight = torch.ops.aten._fused_rmsnorm_backward(
-                grad_output, inv_var, input_, normalized_shape, eps, weight
+            grad_input, grad_weight = torch.ops.aten._fused_rms_norm_backward(
+                grad_output,
+                input_,
+                normalized_shape,
+                inv_var,
+                weight,
+                [True, weight is not None],
             )
 
             return output, grad_input, grad_weight
@@ -61,8 +66,8 @@ class TestDTensorOps(DTensorOpTestBase):
         args = [
             torch.randn(4, 4096, 4096, device=device),
             (4096,),
-            1e-6,
             torch.randn(4096, device=device),
+            1e-6,
         ]
         kwargs = {}
 

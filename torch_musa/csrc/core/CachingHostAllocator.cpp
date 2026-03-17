@@ -18,6 +18,8 @@ using Block = HostBlock<MUSAStream>;
 struct MUSACachingHostAllocatorImpl
     : public CachingHostAllocatorImpl<MUSAStream, EventPool::Event> {
  private:
+  std::unordered_map<void*, bool> use_host_register;
+
   void allocate_host_memory(size_t size, void** ptr) override {
     // Pinned memory pointers allocated by any device can be directly used by
     // any other device, regardless of the current device at the time of
@@ -31,44 +33,58 @@ struct MUSACachingHostAllocatorImpl
     auto primary_ctx_device_index =
         c10::musa::getDeviceIndexWithPrimaryContext();
     if (primary_ctx_device_index.has_value()) {
-      device_guard.reset_device(
-          at::Device(kMUSA, *primary_ctx_device_index));
+      device_guard.reset_device(at::Device(kMUSA, *primary_ctx_device_index));
     }
 
     auto start = std::chrono::system_clock::now();
-    if (c10::musa::MUSACachingAllocator::MUSAAllocatorConfig::
-            pinned_use_musa_host_register()) {
+    bool use_register = c10::musa::MUSACachingAllocator::MUSAAllocatorConfig::
+        pinned_use_musa_host_register();
+    if (use_register) {
       allocWithMusaHostRegister(ptr, size);
     } else {
       // Use musaHostAlloc for allocating pinned memory (global lock in driver)
       C10_MUSA_CHECK(musaHostAlloc(ptr, size, musaHostAllocDefault));
     }
+
     auto end = std::chrono::system_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    auto duration =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
     // Update the statistics on the time spent on musaHostAlloc/hostRegister
     {
       std::lock_guard<std::mutex> g(stats_.timing_mutex_);
+      TORCH_INTERNAL_ASSERT_DEBUG_ONLY(use_host_register.count(*ptr) == 0);
+      use_host_register[*ptr] = use_register;
       stats_.host_alloc_time.increase(duration.count());
     }
   }
 
   void free_block(Block* block) override {
-    auto start = std::chrono::system_clock::now();
-    if (c10::musa::MUSACachingAllocator::MUSAAllocatorConfig::
-            pinned_use_musa_host_register()) {
-      void* ptr = block->ptr_;
+    auto start = std::chrono::steady_clock::now();
+    // Users may change the allocator config at will. torch unit tests do this.
+    // However, allocations using musaHostRegister should use corresonding
+    // musaHostUnregister and similarly for musaHostAlloc / musaFreeHost.
+    void* ptr = block->ptr_;
+    bool use_register = false;
+    {
+      std::lock_guard<std::mutex> g(stats_.timing_mutex_);
+      TORCH_INTERNAL_ASSERT_DEBUG_ONLY(use_host_register.count(ptr) == 1);
+      use_register = use_host_register[ptr];
+    }
+    if (use_register) {
       AT_MUSA_CHECK(musaHostUnregister(ptr));
       std::free(ptr);
     } else {
-      AT_MUSA_CHECK(musaFreeHost(block->ptr_));
+      AT_MUSA_CHECK(musaFreeHost(ptr));
     }
-    auto end = std::chrono::system_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    auto end = std::chrono::steady_clock::now();
+    auto duration =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
     // Update the statistics on the time spent on musaFreeHost/hostUnregister
     {
       std::lock_guard<std::mutex> g(stats_.timing_mutex_);
+      use_host_register.erase(ptr);
       stats_.host_free_time.increase(duration.count());
     }
   }
@@ -106,7 +122,7 @@ struct MUSACachingHostAllocatorImpl
   TaskThreadPool* getThreadPool() {
     static TaskThreadPool* pool = new TaskThreadPool(
         static_cast<int>(c10::musa::MUSACachingAllocator::MUSAAllocatorConfig::
-            pinned_max_register_threads()));
+                             pinned_max_register_threads()));
     return pool;
   }
 
@@ -128,21 +144,6 @@ struct MUSACachingHostAllocatorImpl
     for (uintptr_t p = alignedStart; p < ((uintptr_t)end); p += pageSize) {
       memset((void*)p, 0, 1);
     }
-  }
-
-  void registerPages(const void* ptr, size_t size) {
-    AT_MUSA_CHECK(
-        musaHostRegister((void*)ptr, (size_t)size, musaHostRegisterDefault));
-
-    // If host and device pointer don't match, give a warning and exit
-    void* devptr = nullptr;
-    AT_MUSA_CHECK(musaHostGetDevicePointer(&devptr, (void*)ptr, 0));
-    TORCH_CHECK(
-        (void*)devptr == (void*)ptr,
-        "Host and device pointer dont match with musaHostRegister. "
-        "Please dont use this feature by setting "
-        "PYTORCH_MUSA_ALLOC_CONF=use_musa_host_register:False (default)",
-        "");
   }
 
   void allocWithMusaHostRegister(void** ptr, size_t roundSize) {
@@ -193,59 +194,17 @@ struct MUSACachingHostAllocatorImpl
     }
 
     // Register the mapped pages using musaHostRegister
-    registerPages(*ptr, roundSize);
+    AT_MUSA_CHECK(musaHostRegister(*ptr, roundSize, musaHostRegisterDefault));
   }
 };
 
-void raw_local_deleter(void* ptr);
+DECLARE_HOST_ALLOCATOR(
+    MUSACachingHostAllocator,
+    MUSACachingHostAllocatorImpl,
+    raw_local_deleter,
+    caching_host_allocator)
 
-struct MUSACachingHostAllocator final
-    : public CachingHostAllocatorInterface<MUSACachingHostAllocatorImpl> {
-  at::DataPtr allocate(size_t size) override {
-    auto ptr_and_ctx = impl_->allocate(size);
-    return {
-        ptr_and_ctx.first,
-        ptr_and_ctx.second,
-        &raw_local_deleter,
-        at::DeviceType::CPU};
-  }
-};
-
-MUSACachingHostAllocator caching_host_allocator;
-
-MUSACachingHostAllocator& getMUSACachingHostAllocator() {
-  return caching_host_allocator;
-}
-
-void raw_local_deleter(void* ptr) {
-  getMUSACachingHostAllocator().free(ptr);
-}
+REGISTER_HOST_ALLOCATOR(at::kMUSA, &caching_host_allocator)
 
 } // anonymous namespace
-
-bool CachingHostAllocator_recordEvent(void* ptr, void* ctx, MUSAStream stream) {
-  return getMUSACachingHostAllocator().record_event(ptr, ctx, stream);
-}
-
-// Releases cached pinned memory allocations via musaHostFree
-void CachingHostAllocator_emptyCache() {
-  getMUSACachingHostAllocator().empty_cache();
-}
-
-at::Allocator* getCachingHostAllocator() {
-  return &getMUSACachingHostAllocator();
-}
-
-at::HostStats CachingHostAllocator_getStats() {
-  return getMUSACachingHostAllocator().getStats();
-}
-
-void CachingHostAllocator_resetAccumulatedStats() {
-  return getMUSACachingHostAllocator().resetAccumulatedStats();
-}
-
-void CachingHostAllocator_resetPeakStats() {
-  return getMUSACachingHostAllocator().resetPeakStats();
-}
-
 } // namespace at::musa

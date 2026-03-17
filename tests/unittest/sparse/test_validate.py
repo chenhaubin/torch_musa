@@ -16,7 +16,7 @@ m = random.randint(1, 128)
 def test_validate_compressed_sparse_indices():
     global m, n
 
-    input_tensor = torch.randint(low=1, high=n, size=(m, n)).musa()
+    input_tensor = torch.randint(low=0, high=n, size=(m, n)).musa()
     crow_indices = [0]
     values = []
     col_indices = []

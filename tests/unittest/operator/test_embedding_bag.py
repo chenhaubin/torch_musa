@@ -50,10 +50,18 @@ def test_embedding_bag_1d(input_data, mode):
         comparators=testing.DefaultComparator(abs_diff=1e-6, rel_diff=1e-6),
         test_dtype=torch.float32,
     )
+    rt_inp = {"input": input_data["input"], "offsets": offsets}
+    dtype_nocast_map = {"input": True, "offsets": True}
+    if mode == "sum":
+        rt_inp["per_sample_weights"] = torch.rand_like(
+            input_data["input"], dtype=torch.float32
+        )
+        dtype_nocast_map["per_sample_weights"] = True
+
     test.check_result(
-        {"input": input_data["input"], "offsets": offsets},
+        rt_inp,
         train=False,
-        dtype_nocast_map={"input": True, "offsets": True},
+        dtype_nocast_map=dtype_nocast_map,
     )
 
 
@@ -82,10 +90,18 @@ def test_embedding_bag_backward(input_data, mode, sparse):
         comparators=testing.DefaultComparator(rel_diff=rtol, abs_diff=atol),
         test_dtype=torch.float32,
     )
+    rt_inp = {"input": input_data["input"], "offsets": offsets}
+    dtype_nocast_map = {"input": True, "offsets": True}
+    if mode == "sum":
+        rt_inp["per_sample_weights"] = torch.rand_like(
+            input_data["input"], dtype=torch.float32
+        )
+        dtype_nocast_map["per_sample_weights"] = True
+
     test.check_result(
-        {"input": input_data["input"], "offsets": offsets},
+        rt_inp,
         train=True,
-        dtype_nocast_map={"input": True, "offsets": True},
+        dtype_nocast_map=dtype_nocast_map,
     )
 
 

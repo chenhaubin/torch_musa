@@ -1,16 +1,15 @@
-# pylint: disable=C0103,C0116
-
 """MUSADeviceOpOverrides implementation"""
-# pylint: disable=C0103, C0116
+
+# pylint: disable=C0103,C0116,C0301
 
 from typing import Optional
-from torch._inductor.utils import triton_version_uses_attrs_dict
 
-# pylint:disable=unused-import
 import torch
 from torch._inductor.codegen.common import (
     DeviceOpOverrides,
+    TritonScratchWorkspace,
     register_device_op_overrides,
+    get_device_op_overrides,
 )
 
 
@@ -97,6 +96,21 @@ class MUSADeviceOpOverrides(DeviceOpOverrides):
                 return func;
             }
 
+            static inline MUfunction loadKernel(const void* start, const std::string &funcName, uint32_t sharedMemBytes) {
+                MUmodule mod;
+                MUfunction func;
+                MUSA_DRIVER_CHECK(muModuleLoadData(&mod, start));
+                MUSA_DRIVER_CHECK(muModuleGetFunction(&func, mod, funcName.c_str()));
+                if (sharedMemBytes > 0) {
+                    MUSA_DRIVER_CHECK(muFuncSetAttribute(
+                        func,
+                        MU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES,
+                        sharedMemBytes
+                    ))
+                }
+                return func;
+            }
+
             static inline void launchKernel(
                     MUfunction func,
                     uint32_t gridX,
@@ -107,7 +121,7 @@ class MUSADeviceOpOverrides(DeviceOpOverrides):
                     void* args[],
                     musaStream_t stream) {
                 MUSA_DRIVER_CHECK(muLaunchKernel(
-                    func, gridX, gridY, gridZ, 32*numWarps, 1, 1, sharedMemBytes, stream, args, nullptr
+                    func, gridX, gridY, gridZ, 128*numWarps, 1, 1, sharedMemBytes, stream, args, nullptr
                 ));
             }
         """
@@ -229,10 +243,33 @@ class MUSADeviceOpOverrides(DeviceOpOverrides):
     def cpp_device_ptr(self) -> str:
         return "MUdeviceptr"
 
-    def cpp_global_scratch(self, idx: int) -> Optional[tuple[str, str]]:
-        if triton_version_uses_attrs_dict():
-            return f"MUdeviceptr global_scratch_{idx} = 0;", f"global_scratch_{idx}"
-        return None
+    def cpp_scratch(
+        self, idx: int, workspace: TritonScratchWorkspace, prefix: Optional[str] = None
+    ) -> Optional[tuple[list[str], str]]:
+        prefix = f"{prefix}_" if prefix else ""
+        var_name = f"{prefix}scratch_{idx}"
+        if workspace.size > 0:
+            size_array = f"int64_t {var_name}_size[] = {{{workspace.size}}};"
+            stride_array = f"int64_t {var_name}_stride[] = {{1}};"
+            device_type = "cached_torch_device_type_musa"
+            device_idx = "device_idx_"
+
+            return (
+                [
+                    f"{size_array}",
+                    f"{stride_array}",
+                    f"AtenTensorHandle {var_name}_handle;",
+                    (
+                        f"AOTI_TORCH_ERROR_CODE_CHECK(aoti_torch_empty_strided(1, {var_name}_size, {var_name}_stride, "
+                        f"{workspace.generate_dtype_str()}, {device_type}, {device_idx}, &{var_name}_handle));"
+                    ),
+                    f"RAIIAtenTensorHandle {var_name}_tensor({var_name}_handle);",
+                    f"MUdeviceptr {var_name} = reinterpret_cast<MUdeviceptr>({var_name}_tensor.data_ptr());",
+                ],
+                var_name,
+            )
+        return [f"MUdeviceptr {var_name} = 0;"], var_name
 
 
+get_device_op_overrides("cpu")
 register_device_op_overrides("musa", MUSADeviceOpOverrides())

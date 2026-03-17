@@ -1,4 +1,5 @@
 """Register MUSA backend for Inductor"""
+
 # pylint:disable=import-outside-toplevel,W0718,C0103,W0612,C0413
 
 import torch
@@ -14,25 +15,50 @@ from .ir import _apply_ir_patch
 __all__ = ["_init_inductor_backend_registration"]
 
 
+def _apply_codecache_hash_patch():
+    try:
+        from torch._inductor import codecache as _codecache
+    except (ImportError, AttributeError):
+        return
+
+    if getattr(_codecache.get_hash, "_torch_musa_patched", False):
+        return
+
+    original_get_hash = _codecache.get_hash
+
+    def _musa_get_hash(content, extra="", hash_type="code"):
+        if hash_type == "mubin":
+            return _codecache.code_hash(repr(content))
+        return original_get_hash(content, extra, hash_type)
+
+    _musa_get_hash._torch_musa_patched = True
+    _codecache.get_hash = _musa_get_hash
+
+
 def _init_inductor_backend_registration():
     from ._aten_fallback import _make_torch_musa_aten_fallback
-    from torch._inductor.codegen.common import (
-        register_backend_for_device,
-        register_device_op_overrides,
-    )
-    from .codegen.wrapper import MUSATritonWrapperCodeGen  # avoid cicular import
-    from .codegen.cpp_wrapper_musa import MUSACppWrapper
+    from torch._inductor.codegen.common import register_backend_for_device
+    from torch._inductor.codegen.cpp_wrapper_gpu import CppWrapperGpu
+    from .codegen.wrapper import MUSATritonWrapperCodeGen  # avoid circular import
     from .codegen.triton import MUSATritonScheduling
-    from .codegen.device_op_overrides import MUSADeviceOpOverrides
     from .runtime.triton_heuristics import _apply_triton_heuristics_patches
 
     # done fallback here
     _make_torch_musa_aten_fallback()
 
+    # Monkey-patch: make get_cpp_wrapper_cubin_path_name return "mubin_path" for MUSA.
+    from torch._inductor import codecache as inductor_codecache
+    from torch._inductor.codegen import cpp_wrapper_gpu as inductor_cpp_wrapper_gpu
+
+    def _mubin_path_name():
+        return "mubin_path"
+
+    inductor_codecache.get_cpp_wrapper_cubin_path_name = _mubin_path_name
+    inductor_cpp_wrapper_gpu.get_cpp_wrapper_cubin_path_name = _mubin_path_name
+
     # Register triton MUSA backend in TorchInductor
-    register_device_op_overrides("musa", MUSADeviceOpOverrides())
     register_backend_for_device(
-        "musa", MUSATritonScheduling, MUSATritonWrapperCodeGen, MUSACppWrapper
+        "musa", MUSATritonScheduling, MUSATritonWrapperCodeGen, CppWrapperGpu
     )
 
     # apply patches
@@ -76,6 +102,9 @@ def _prepatch_triton_attrs_descriptor_for_torch25():
 
 # `has_triton` might be called before our inductor backend registration (we use lazy
 # registration to avoid cicular import), so enable util patches once torch_musa is imported
+from .codegen import device_op_overrides
+
+_apply_codecache_hash_patch()
 _apply_util_patches()
 _apply_ir_patch()
 _prepatch_triton_attrs_descriptor_for_torch25()

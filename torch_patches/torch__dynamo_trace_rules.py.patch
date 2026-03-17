@@ -1,11 +1,11 @@
 diff --git a/torch/_dynamo/trace_rules.py b/torch/_dynamo/trace_rules.py
-index da71649..b8cd1d0 100644
+index 47ad8cd..fa3a550 100644
 --- a/torch/_dynamo/trace_rules.py
 +++ b/torch/_dynamo/trace_rules.py
-@@ -2228,6 +2228,8 @@ torch_c_binding_in_graph_functions = dict.fromkeys(
-         "torch.slice_inverse",
+@@ -2308,6 +2308,8 @@ torch_c_binding_in_graph_functions = dict.fromkeys(
          "torch._assert_scalar",
          "torch._functional_assert_scalar",
+         "torch.xpu._get_device_properties",
 +        "torch.rope",
 +        "torch.swish_glu",
      ],

@@ -1,11 +1,11 @@
 diff --git a/torch/nn/functional.pyi.in b/torch/nn/functional.pyi.in
-index 1a72b0f..24a3eee 100644
+index d0b6444..a4be4d4 100644
 --- a/torch/nn/functional.pyi.in
 +++ b/torch/nn/functional.pyi.in
-@@ -599,6 +599,14 @@ def multi_head_attention_forward(
-     average_attn_weights: bool = True,
-     is_causal: bool = False,
- ) -> tuple[Tensor, Optional[Tensor]]: ...
+@@ -852,6 +852,20 @@ def upsample(
+ 
+ __all__ += ["upsample"]
+ 
 +def rope(
 +    input: Tensor,
 +    freq_cis: Tensor,
@@ -13,7 +13,13 @@ index 1a72b0f..24a3eee 100644
 +    batch_first: bool,
 +    multi_latent_attention: bool,
 +) -> Tensor: ...
++
++__all__ += ["rope"]
++
 +def swish_glu(input: Tensor) -> Tensor: ...
- 
++
++__all__ += ["swish_glu"]
++
  ${imported_hints}
  
+ ${dispatched_hints}

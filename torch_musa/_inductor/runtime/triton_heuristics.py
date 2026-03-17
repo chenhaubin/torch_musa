@@ -22,7 +22,6 @@ from torch._inductor.runtime.triton_heuristics import (
     CachingAutotuner,
     DebugAutotuner,
     TritonCompileResult,
-    config_to_dict,
 )
 import torch._inductor.runtime.triton_heuristics
 from torch._inductor.runtime import triton_helpers
@@ -52,7 +51,9 @@ else:
     GPUTarget = None
 
 
-# Implement a MUSACachingAutotuner to facilitate performance tuning on MTGPU
+# Implement a MUSACachingAutotuner to facilitate performance tuning on MTGPU.
+# Only _precompile_config needs override for MUSA-specific warp_size logic.
+# save_gpu_kernel is handled by the patched PyTorch CachingAutotuner base class.
 class MUSACachingAutotuner(CachingAutotuner):
     """class of MUSACachingAutotuner"""
 
@@ -123,41 +124,6 @@ class MUSACachingAutotuner(CachingAutotuner):
             triton_hash_to_path_key(binary.hash), self.triton_meta.get("device", 0)
         )
         return TritonCompileResult(binary, cfg, compile_meta, self.inductor_meta)
-
-    def save_gpu_kernel(self, stream, launcher):
-        key = self.inductor_meta.get("kernel_name", None)  # unique kernel name
-        assert key is not None, "kernel_name can not be None"
-        params = {
-            "mangled_name": (
-                launcher.bin.metadata.name
-                if hasattr(launcher.bin.metadata, "name")
-                else launcher.bin.metadata["name"]
-            ),
-            "num_warps": (
-                launcher.bin.num_warps
-                if hasattr(launcher.bin, "num_warps")
-                else launcher.bin.metadata.num_warps
-            ),
-            "shared_mem": (
-                launcher.bin.shared
-                if hasattr(launcher.bin, "shared")
-                else launcher.bin.metadata.shared
-            ),
-            "stream": stream,
-            # User defined triton kernels will have arbitrary kwarg names
-            "config": config_to_dict(launcher.config),
-            "inductor_meta": self.inductor_meta,
-            "triton_meta": self.triton_meta,
-            "def_args": launcher.def_args,
-            "call_args": launcher.call_args,
-        }
-        from ..codegen.codecache import MusaKernelParamCache
-
-        bin_type = {"musa": "mubin"}.get(self.device_props.type, "cubin")
-        binary = launcher.bin.asm[bin_type]
-        MusaKernelParamCache.set(key, params, binary)
-
-        self.cuda_kernel_saved = True
 
 
 class MUSADebugAutotuner(DebugAutotuner, MUSACachingAutotuner):

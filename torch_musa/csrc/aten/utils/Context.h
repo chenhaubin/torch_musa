@@ -41,9 +41,17 @@ class Context {
   // Set the allow_tf32 flag.
   void SetAllowTF32(bool allow_tf32);
 
+  // Helper function to check if TF32 is enabled or not.
+  bool GetAllowMublasTF32() const;
+
+  // Set the allow_tf32 flag.
+  void SetAllowMublasTF32(bool allow_tf32);
+
  private:
   // TF32 is enabled by default to keep consistent to official PyTorch.
   bool allow_tf32_ = true;
+  bool allow_mublas_tf32_ =
+      c10::utils::check_env("TORCH_ALLOW_TF32_MUBLAS_OVERRIDE") == true;
   c10::once_flag musa_init_;
 };
 
@@ -60,6 +68,9 @@ static inline bool HasMUSA() {
 
 // Get the ComputeMode (TENSOR/SCALAR) from the context and input tensor dtype
 ::musa::dnn::Convolution::ComputeMode GetComputeModeFromCtx(
+    const at::ScalarType& dtype);
+
+::musa::dnn::Convolution::ComputeMode GetMatmulComputeModeFromCtx(
     const at::ScalarType& dtype);
 
 PyMethodDef* GetContextMethods();

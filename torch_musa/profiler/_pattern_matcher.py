@@ -123,10 +123,7 @@ class FP32MatMulPattern(Pattern):
             "You are currently using GPU that supports TF32. "
             "Please enable TF32 by setting 'torch.backends.mudnn.allow_tf32 = True'"
         )
-        self.url = (
-            "https://pytorch.org/docs/stable/notes/musa.html#tensorfloat-32-tf32-on-ampere"
-            "-devices "
-        )
+        self.url = "https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices "  # pylint: disable=C0301
 
     @property
     def skip(self):

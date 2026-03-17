@@ -801,6 +801,7 @@ class TestProfilerTree(TestCase):
               aten::add
                 torch/_library/simple_registry.py(...): find_torch_dispatch_rule
                   torch/_library/simple_registry.py(...): find
+                    <built-in method get of dict object at 0xXXXXXXXXXXXX>
                   torch/_library/simple_registry.py(...): find
                     <built-in method get of dict object at 0xXXXXXXXXXXXX>
                 test_profiler_tree.py(...): __torch_dispatch__
@@ -809,7 +810,7 @@ class TestProfilerTree(TestCase):
                   torch/utils/_pytree.py(...): tree_map
                     ...
                   torch/_ops.py(...): __call__
-                    <built-in method  of PyCapsule object at 0xXXXXXXXXXXXX>
+                    <built-in method  of pybind11_builtins.pybind11_detail_function_record_v1_system_libstdcpp_gxx_abi_1xxx_use_cxx11_abi_1 object at 0xXXXXXXXXXXXX>
                       aten::add
                   torch/utils/_pytree.py(...): tree_map
                     ...

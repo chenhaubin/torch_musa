@@ -1,5 +1,5 @@
 diff --git a/torch/csrc/inductor/aoti_runtime/device_utils.h b/torch/csrc/inductor/aoti_runtime/device_utils.h
-index 7b48f49..23e4b4a 100644
+index 8c75560..1ba2721 100644
 --- a/torch/csrc/inductor/aoti_runtime/device_utils.h
 +++ b/torch/csrc/inductor/aoti_runtime/device_utils.h
 @@ -5,28 +5,28 @@
@@ -19,7 +19,8 @@ index 7b48f49..23e4b4a 100644
 +#include <musa.h>
 +#include <musa_runtime_api.h>
  
- #define AOTI_RUNTIME_DEVICE_CHECK(EXPR)                    \
+-#define AOTI_RUNTIME_CUDA_CHECK(EXPR)                      \
++#define AOTI_RUNTIME_MUSA_CHECK(EXPR)                      \
    do {                                                     \
 -    const cudaError_t code = EXPR;                         \
 -    const char* msg = cudaGetErrorString(code);            \

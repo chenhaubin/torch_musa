@@ -1,9 +1,9 @@
 diff --git a/aten/src/ATen/native/musa_unique.cpp b/aten/src/ATen/native/musa_unique.cpp
 new file mode 100644
-index 0000000..82e4ec4
+index 0000000..eb510be
 --- /dev/null
 +++ b/aten/src/ATen/native/musa_unique.cpp
-@@ -0,0 +1,200 @@
+@@ -0,0 +1,180 @@
 +#include <ATen/Dispatch.h>
 +
 +#ifndef AT_PER_OPERATOR_HEADERS
@@ -14,8 +14,6 @@ index 0000000..82e4ec4
 +#include <ATen/ops/cross_entropy_loss_2d_choice_native.h>
 +#include <ATen/ops/_fused_cross_entropy_loss_2d_forward_native.h>
 +#include <ATen/ops/_fused_cross_entropy_loss_2d_backward_native.h>
-+#include <ATen/ops/_fused_rmsnorm_forward_native.h>
-+#include <ATen/ops/_fused_rmsnorm_backward_native.h>
 +#include <ATen/ops/_fused_rope_backward_native.h>
 +#include <ATen/ops/_fused_rope_forward.h>
 +#include <ATen/ops/_fused_rope_forward_native.h>
@@ -40,24 +38,6 @@ index 0000000..82e4ec4
 +
 +Tensor gated_silu(const Tensor& input) {
 +  NYI("gated_silu");
-+}
-+
-+std::tuple<Tensor, Tensor> _fused_rmsnorm_forward(
-+    const Tensor& input,
-+    IntArrayRef normalized_shape,
-+    double eps,
-+    const std::optional<Tensor>& weight) {
-+  NYI("_fused_rmsnorm_forward");
-+}
-+
-+std::tuple<Tensor, Tensor> _fused_rmsnorm_backward(
-+    const Tensor& grad_out,
-+    const Tensor& invvar,
-+    const Tensor& input,
-+    IntArrayRef normalized_shape,
-+    double eps,
-+    const std::optional<Tensor>& weight) {
-+  NYI("_fused_rmsnorm_backward");
 +}
 +
 +std::tuple<Tensor, Tensor, Tensor>

@@ -34,8 +34,9 @@ __global__ void IndexSelectVectorKernel(
   // iobit is used to choose length of vector load, which is following muDNN
   constexpr int bits_of_byte = 8;
   constexpr int vlen_min = iobit / sizeof(SrcDtype) / bits_of_byte;
-  constexpr int max_load_vlen =
-      sizeof(SrcDtype) <= 4 ? (sizeof(SrcDtype) <= 2 ? 8 : 4) : 2;
+  constexpr int max_load_vlen = sizeof(SrcDtype) <= 4
+      ? (sizeof(SrcDtype) <= 2 ? 8 : 4)
+      : (sizeof(SrcDtype) <= 8 ? 2 : 1);
   constexpr int vlen = vlen_min > max_load_vlen ? max_load_vlen : vlen_min;
   using SrcVec =
       at::musa::VecType<SrcDtype, vlen * sizeof(SrcDtype) * bits_of_byte>;
@@ -181,6 +182,8 @@ struct KernelTable {
     REGISTER_KERNEL(at::ScalarType::Short, int16_t);
     REGISTER_KERNEL(at::ScalarType::QInt8, int8_t);
     REGISTER_KERNEL(at::ScalarType::QUInt8, uint8_t);
+    REGISTER_KERNEL(at::ScalarType::ComplexFloat, c10::complex<float>);
+    REGISTER_KERNEL(at::ScalarType::ComplexDouble, c10::complex<double>);
   }
 
   void launch(
@@ -252,7 +255,7 @@ void IndexSelectRun(
   bool can_vector_load = select_dim != in.dim() - 1;
   const int max_load_vlen = at::musa::DTypeSize(in.scalar_type()) <= 4
       ? (at::musa::DTypeSize(in.scalar_type()) <= 2 ? 8 : 4)
-      : 2;
+      : (at::musa::DTypeSize(in.scalar_type()) <= 8 ? 2 : 1);
   const uint32_t tail = s0 % max_load_vlen;
 
   static KernelTable kernel_index_select;

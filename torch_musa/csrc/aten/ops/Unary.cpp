@@ -30,30 +30,57 @@ void SetUpUnaryFloatConfig(TensorIteratorConfig& config) {
       .promote_integer_inputs_to_float(true);
 }
 
-void ReciprocalMeta(
-    MusaTensorIterator& iter,
-    const Tensor& out,
-    const Tensor& inp) {
-  InitUnaryIterator(iter, out, inp);
-  TensorIteratorConfig config;
-  SetUpUnaryFloatConfig(config);
-  iter.build(config);
-}
+#define UNARY_FLOAT_COMMON_META(FUNC)                                         \
+  void FUNC(MusaTensorIterator& iter, const Tensor& out, const Tensor& inp) { \
+    InitUnaryIterator(iter, out, inp);                                        \
+    TensorIteratorConfig config;                                              \
+    SetUpUnaryFloatConfig(config);                                            \
+    iter.build(config);                                                       \
+  }
+
+UNARY_FLOAT_COMMON_META(ReciprocalMeta)
+UNARY_FLOAT_COMMON_META(ErfMeta)
+UNARY_FLOAT_COMMON_META(LogMeta)
+UNARY_FLOAT_COMMON_META(Log2Meta)
+UNARY_FLOAT_COMMON_META(Log10Meta)
+UNARY_FLOAT_COMMON_META(SqrtMeta)
+UNARY_FLOAT_COMMON_META(RsqrtMeta)
+UNARY_FLOAT_COMMON_META(TanhMeta)
+UNARY_FLOAT_COMMON_META(TanMeta)
+UNARY_FLOAT_COMMON_META(SigmoidMeta)
+UNARY_FLOAT_COMMON_META(ExpMeta)
+UNARY_FLOAT_COMMON_META(SinMeta)
+UNARY_FLOAT_COMMON_META(CosMeta)
+UNARY_FLOAT_COMMON_META(AcosMeta)
+UNARY_FLOAT_COMMON_META(AtanMeta)
+
+#undef UNARY_FLOAT_COMMON_META
+
+#define UNARY_FLOAT_COMMON_IMPL(FUNC, MODE)                         \
+  void FUNC(MusaTensorIterator& iter, const std::string& op_name) { \
+    UnaryCall(iter, MODE, op_name);                                 \
+  }
+
+UNARY_FLOAT_COMMON_IMPL(ErfImpl, UNARY_MODE::ERF)
+UNARY_FLOAT_COMMON_IMPL(LogImpl, UNARY_MODE::LOG)
+UNARY_FLOAT_COMMON_IMPL(Log2Impl, UNARY_MODE::LOG2)
+UNARY_FLOAT_COMMON_IMPL(Log10Impl, UNARY_MODE::LOG10)
+UNARY_FLOAT_COMMON_IMPL(SqrtImpl, UNARY_MODE::SQRT)
+UNARY_FLOAT_COMMON_IMPL(RsqrtImpl, UNARY_MODE::RSQRT)
+UNARY_FLOAT_COMMON_IMPL(TanhImpl, UNARY_MODE::TANH)
+UNARY_FLOAT_COMMON_IMPL(TanImpl, UNARY_MODE::TAN)
+UNARY_FLOAT_COMMON_IMPL(SigmoidImpl, UNARY_MODE::SIGMOID)
+UNARY_FLOAT_COMMON_IMPL(ExpImpl, UNARY_MODE::EXP)
+UNARY_FLOAT_COMMON_IMPL(SinImpl, UNARY_MODE::SIN)
+UNARY_FLOAT_COMMON_IMPL(CosImpl, UNARY_MODE::COS)
+UNARY_FLOAT_COMMON_IMPL(AcosImpl, UNARY_MODE::ACOS)
+UNARY_FLOAT_COMMON_IMPL(AtanImpl, UNARY_MODE::ATAN)
+
+#undef UNARY_FLOAT_COMMON_IMPL
 
 void ReciprocalImpl(MusaTensorIterator& iter, const std::string& op_name) {
   const auto alpha = Scalar(static_cast<double>(-1.0));
   UnaryAlphaCall(iter, alpha, UNARY_MODE::POW, op_name);
-}
-
-void ErfMeta(MusaTensorIterator& iter, const Tensor& out, const Tensor& inp) {
-  InitUnaryIterator(iter, out, inp);
-  TensorIteratorConfig config;
-  SetUpUnaryFloatConfig(config);
-  iter.build(config);
-}
-
-void ErfImpl(MusaTensorIterator& iter, const std::string& op_name) {
-  UnaryCall(iter, UNARY_MODE::ERF, op_name);
 }
 
 #define GEN_IMPL(TPL, FUNC, META, IMPL) \
@@ -71,6 +98,19 @@ void ErfImpl(MusaTensorIterator& iter, const std::string& op_name) {
 
 GEN_IMPL(, UnaryReciprocal, ReciprocalMeta, ReciprocalImpl)
 GEN_IMPL(, UnaryErf, ErfMeta, ErfImpl)
+GEN_IMPL(, UnaryLog, LogMeta, LogImpl)
+GEN_IMPL(, UnaryLog2, Log2Meta, Log2Impl)
+GEN_IMPL(, UnaryLog10, Log10Meta, Log10Impl)
+GEN_IMPL(, UnarySqrt, SqrtMeta, SqrtImpl)
+GEN_IMPL(, UnaryRsqrt, RsqrtMeta, RsqrtImpl)
+GEN_IMPL(, UnaryTanh, TanhMeta, TanhImpl)
+GEN_IMPL(, UnaryTan, TanMeta, TanImpl)
+GEN_IMPL(, UnarySigmoid, SigmoidMeta, SigmoidImpl)
+GEN_IMPL(, UnaryExp, ExpMeta, ExpImpl)
+GEN_IMPL(, UnarySin, SinMeta, SinImpl)
+GEN_IMPL(, UnaryCos, CosMeta, CosImpl)
+GEN_IMPL(, UnaryAcos, AcosMeta, AcosImpl)
+GEN_IMPL(, UnaryAtan, AtanMeta, AtanImpl)
 
 #undef GEN_IMPL
 
@@ -97,6 +137,19 @@ GEN_IMPL(, UnaryErf, ErfMeta, ErfImpl)
 
 GEN_FUNCTION(Reciprocal, UnaryReciprocal)
 GEN_FUNCTION(Erf, UnaryErf)
+GEN_FUNCTION(Log, UnaryLog)
+GEN_FUNCTION(Log2, UnaryLog2)
+GEN_FUNCTION(Log10, UnaryLog10)
+GEN_FUNCTION(Sqrt, UnarySqrt)
+GEN_FUNCTION(Rsqrt, UnaryRsqrt)
+GEN_FUNCTION(Tanh, UnaryTanh)
+GEN_FUNCTION(Tan, UnaryTan)
+GEN_FUNCTION(Sigmoid, UnarySigmoid)
+GEN_FUNCTION(Exp, UnaryExp)
+GEN_FUNCTION(Sin, UnarySin)
+GEN_FUNCTION(Cos, UnaryCos)
+GEN_FUNCTION(Acos, UnaryAcos)
+GEN_FUNCTION(Atan, UnaryAtan)
 
 #undef GEN_FUNCTION
 

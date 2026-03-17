@@ -1,6 +1,6 @@
-#include <pybind11/pybind11.h>
+#include <Python.h>
 
-extern PyObject* InitMusaModule();
+extern PyObject* InitMusaModule(void);
 
 PyMODINIT_FUNC PyInit__MUSAC(void) {
   return InitMusaModule();

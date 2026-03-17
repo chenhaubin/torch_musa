@@ -141,7 +141,7 @@ void _record_memory_history(
   } else if (record_context) {
     when = c10::musa::MUSACachingAllocator::RecordContext::STATE;
   }
-  at::musa::lazyInitMUSA();
+  at::globalContext().lazyInitDevice(at::musa::kMUSA);
   _initRecordAnnotations();
   c10::musa::MUSACachingAllocator::recordHistory(
       enabled, recorder, trace_alloc_max_entries, when);
@@ -192,7 +192,7 @@ void _record_memory_history(
       when = c10::musa::MUSACachingAllocator::RecordContext::STATE;
     }
   }
-  at::musa::lazyInitMUSA();
+  at::globalContext().lazyInitDevice(at::musa::kMUSA);
   _initRecordAnnotations();
   c10::musa::MUSACachingAllocator::recordHistory(
       enabled.has_value(), recorder, max_entries, when);

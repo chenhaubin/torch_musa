@@ -1,16 +1,64 @@
 [build-system]
 requires = [
-    "setuptools",
-    "wheel",
-    "ninja",
-    "cmake",
-    "typing-extensions",
+    "setuptools >= 70.1.0, <80.0",
+    "cmake >= 3.27.0",
+    "cffi >= 1.15.1",
+    "ninja>=1.11.1",
+    "numpy < 2.0.0",
+    "packaging",
+    "cmake_format >= 0.6.13",
+    "pre-commit == 3.5.0",
+    "black == 23.12.1",
+    "openpyxl",
+    "pyahocorasick",
+    "pyyaml",
+    "requests",
+    "six",  # dependency chain: NNPACK -> PeachPy -> six
+    "typing-extensions>=4.10.0",
 ]
-# Use legacy backend to import local packages in setup.py
 build-backend = "setuptools.build_meta"
 
-[tool.black]
+# follows pytorch
+[project]
+name = "torch_musa"
+version = "2.9.0"
+description = "A PyTorch backend extension for Moore Threads MUSA"
+readme = "README.md"
+license = { text = "BSD-3-Clause" }
+authors = [{ name = "Moore Threads PyTorch AI Dev Team"}]
+keywords = ["pytorch", "musa"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dynamic = [
+    "entry-points",
+    "dependencies",
+    "scripts",
+    "version",
+]
 
+[project.scripts]
+musa-converter = "torch_musa.utils.musa_converter:main"
+
+[project.entry_points."torch.backends"]
+torch_musa = "torch_musa:_autoload"
+
+[tool.black]
 line-length = 100
 indent-width = 4
 target-version = ["py38", "py39", "py310"]

@@ -1,9 +1,137 @@
 """define torch musa storage methods """
 
-# pylint: disable=unused-argument
+# pylint: disable=unused-argument,E0202,W0236,I1101
 import torch
 from torch._utils import _get_async_or_non_blocking
+from torch import classproperty
+from torch.storage import _LegacyStorage, _warn_typed_storage_removal
+
 from torch_musa import _MUSAC
+
+
+class _MusaLegacyStorage(_LegacyStorage):
+    @classmethod
+    def from_buffer(cls, *args, **kwargs):
+        _warn_typed_storage_removal()
+        raise RuntimeError("from_buffer: Not available for MUSA storage")
+
+    @classmethod
+    def _new_with_weak_ptr(cls, *args, **kwargs):
+        raise RuntimeError("_new_with_weak_ptr: Not available for MUSA storage")
+
+    @classmethod
+    def _new_shared_filename(cls, manager, obj, size, *, device=None, dtype=None):
+        raise RuntimeError("_new_shared_filename: Not available for MUSA storage")
+
+
+class ByteStorage(_MusaLegacyStorage):
+    @classproperty
+    def dtype(self):
+        _warn_typed_storage_removal()
+        return self._dtype
+
+    @classproperty
+    def _dtype(self):
+        return torch.uint8
+
+
+class DoubleStorage(_MusaLegacyStorage):
+    @classproperty
+    def dtype(self):
+        _warn_typed_storage_removal()
+        return self._dtype
+
+    @classproperty
+    def _dtype(self):
+        return torch.double
+
+
+class FloatStorage(_MusaLegacyStorage):
+    @classproperty
+    def dtype(self):
+        _warn_typed_storage_removal()
+        return self._dtype
+
+    @classproperty
+    def _dtype(self):
+        return torch.float
+
+
+class HalfStorage(_MusaLegacyStorage):
+    @classproperty
+    def dtype(self):
+        _warn_typed_storage_removal()
+        return self._dtype
+
+    @classproperty
+    def _dtype(self):
+        return torch.half
+
+
+class LongStorage(_MusaLegacyStorage):
+    @classproperty
+    def dtype(self):
+        _warn_typed_storage_removal()
+        return self._dtype
+
+    @classproperty
+    def _dtype(self):
+        return torch.long
+
+
+class IntStorage(_MusaLegacyStorage):
+    @classproperty
+    def dtype(self):
+        _warn_typed_storage_removal()
+        return self._dtype
+
+    @classproperty
+    def _dtype(self):
+        return torch.int
+
+
+class ShortStorage(_MusaLegacyStorage):
+    @classproperty
+    def dtype(self):
+        _warn_typed_storage_removal()
+        return self._dtype
+
+    @classproperty
+    def _dtype(self):
+        return torch.short
+
+
+class CharStorage(_MusaLegacyStorage):
+    @classproperty
+    def dtype(self):
+        _warn_typed_storage_removal()
+        return self._dtype
+
+    @classproperty
+    def _dtype(self):
+        return torch.int8
+
+
+class BoolStorage(_MusaLegacyStorage):
+    @classproperty
+    def dtype(self):
+        _warn_typed_storage_removal()
+        return self._dtype
+
+    @classproperty
+    def _dtype(self):
+        return torch.bool
+
+
+class BFloat16Storage(_MusaLegacyStorage):
+    @classproperty
+    def dtype(self):
+        _warn_typed_storage_removal()
+        return self._dtype
+
+    @classproperty
+    def _dtype(self):
+        return torch.bfloat16
 
 
 @property
@@ -57,6 +185,11 @@ def _edit_device(self, device):
 
 
 @classmethod
+def _new_with_weak_ptr(cls, *args, **kwargs):
+    return _MUSAC._new_with_weak_ptr_musa(*args, **kwargs)
+
+
+@classmethod
 def _new_shared_musa(cls, *args, **kwargs):
     return _MUSAC._new_shared_musa(*args, **kwargs)
 
@@ -95,3 +228,5 @@ def set_storage_attributes():
     torch.UntypedStorage._release_ipc_counter_cuda = _release_ipc_counter_musa
 
     torch.UntypedStorage.edit_device = _edit_device
+
+    torch.UntypedStorage._new_with_weak_ptr_musa = _new_with_weak_ptr

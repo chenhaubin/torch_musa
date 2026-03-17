@@ -15,7 +15,7 @@ CUR_DIR=$(
 TORCH_MUSA_HOME=$CUR_DIR
 PYTORCH_PATH=${PYTORCH_REPO_PATH:-$(realpath ${TORCH_MUSA_HOME}/../pytorch)}
 TORCH_PATCHES_DIR=${TORCH_MUSA_HOME}/torch_patches/
-KINETO_URL=${KINETO_URL:-https://github.com/MooreThreads/kineto.git}
+KINETO_URL=${KINETO_URL:-https://sh-code.mthreads.com/ai/kineto.git}
 KINETO_TAG=v2.7.0
 
 BUILD_WHEEL=0
@@ -27,7 +27,7 @@ USE_KINETO=${USE_KINETO:-1}
 ONLY_PATCH=0
 CLEAN=0
 COMPILE_FP64=1
-PYTORCH_TAG=v2.7.1
+PYTORCH_TAG=v2.9.0
 PYTORCH_BUILD_VERSION="${PYTORCH_TAG:1}"
 PYTORCH_BUILD_NUMBER=0 # This is used for official torch distribution.
 USE_MCCL=${USE_MCCL:-1}
@@ -49,7 +49,7 @@ usage() {
 }
 
 # parse paremters
-parameters=$(getopt -o +mtdacpwnh --long all,fp64,musa,torch,debug,asan,clean,patch,wheel,no_kineto,help, -n "$0" -- "$@")
+parameters=$(getopt -o +mtdacpwnh --long all,fp64,musa,torch,debug,asan,clean,wheel,no_kineto,patch,help, -n "$0" -- "$@")
 [ $? -ne 0 ] && {
   echo -e "\033[34mTry '$0 --help' for more information. \033[0m"
   exit 1
@@ -198,7 +198,7 @@ apply_torch_patches() {
 }
 
 update_kineto_source() {
-  echo -e "\033[34mUpdating Kineto...\033[0m"
+  echo -e "\033[34mRemove Kineto in pytorch...\033[0m"
   pushd ${PYTORCH_PATH}
   # remove the current kineto
   rm -rf ${PYTORCH_PATH}/third_party/kineto
@@ -206,69 +206,20 @@ update_kineto_source() {
   # remove the official kineto
   rm -rf ${PYTORCH_PATH}/third_party/kineto
   popd
-  echo -e "\033[34mUpdating KINETO_URL, might take a while...\033[0m"
+  echo -e "\033[34mMoving Updating kineto and moving to pytorch...\033[0m"
+  pushd ${TORCH_MUSA_HOME}
+  git submodule update --init --depth 1
   if [ -d /home/kineto ]; then
-    pushd /home/kineto
-    git checkout ${KINETO_TAG}
-    git submodule update --init --recursive --depth 1
-    popd
-    cp -r /home/kineto ${PYTORCH_PATH}/third_party
+    cp -r /home/kineto/libkineto/third_party ./third_party/kineto/libkineto/
   else
-    git clone ${KINETO_URL} -b ${KINETO_TAG} --depth 1 --recursive ${PYTORCH_PATH}/third_party/kineto
+    git submodule update --init --recursive --depth 1
   fi
-}
-
-# Since the initial environment uses musa kineto by default, we should
-# manually redirect torch kineto's url && commitid if `USE_KINETO=0`.
-# Currently, it's only required for the internal testing purpose.
-revert_torch_kineto() {
-  echo -e "\033[34mReverting to torch kineto...\033[0m"
-  echo -e "\033[34mRemoving mupti...\033[0m"
-  pushd ${PYTORCH_PATH}
-  rm -rf third_party/kineto
-  git submodule update --init --recursive third_party/kineto
-  popd
+  echo "gitdir: $TORCH_MUSA_HOME/.git/modules/third_party/kineto" > ./third_party/kineto/.git
+  cp -r third_party/kineto ${PYTORCH_PATH}/third_party/
 }
 
 update_submodule() {
-  if [ -d ${PYTORCH_PATH}/third_party/kineto ]; then
-    pushd ${PYTORCH_PATH}/third_party/kineto
-    remote_url=$(git remote get-url origin)
-    current_tag=$(git describe --tags --always)
-    popd
-
-    if [ ${USE_KINETO} -eq 0 ]; then
-      if [ "${remote_url}" = "${KINETO_URL}" ]; then
-        rm -rf ${PYTORCH_PATH}/third_party/kineto
-      fi
-      pushd ${PYTORCH_PATH}
-      git submodule update --init --recursive --depth 1
-      popd
-    elif [ "${remote_url}" = "${KINETO_URL}" ]; then
-      pushd ${PYTORCH_PATH}/third_party/kineto
-      echo  -e "\033[34mUpdating KINETO submodule, might take a while...\033[0m"
-      git submodule update --init --recursive
-      popd
-      if [ -d "/tmp/kineto" ]; then
-        rm -rf /tmp/kineto
-      fi
-      mv ${PYTORCH_PATH}/third_party/kineto /tmp
-      pushd ${PYTORCH_PATH}
-      git submodule update --init --recursive --depth 1
-      popd
-      rm -rf ${PYTORCH_PATH}/third_party/kineto
-      mv /tmp/kineto ${PYTORCH_PATH}/third_party
-      if [ "${current_tag}" != "${KINETO_TAG}" ]; then
-        echo  -e "\033[34mUpdate the kineto to the [${KINETO_TAG}]\033[0m"
-        pushd ${PYTORCH_PATH}/third_party/kineto
-        git fetch origin tag ${KINETO_TAG}
-        git checkout ${KINETO_TAG}
-        popd
-      fi
-    else
-      update_kineto_source
-    fi
-  elif [ ${USE_KINETO} -eq 1 ]; then
+  if [ ${USE_KINETO} -eq 1 ]; then
     update_kineto_source
   else
     pushd ${PYTORCH_PATH}
@@ -296,7 +247,8 @@ build_pytorch() {
       DEBUG=${DEBUG_MODE} \
       USE_ASAN=${ASAN_MODE} \
       USE_KINETO=${USE_KINETO} \
-      BUILD_TEST=0 python setup.py bdist_wheel
+      USE_NCCL=0 \
+      BUILD_TEST=0 python -m pip wheel . --wheel-dir ./dist --no-build-isolation
     status=$?
     rm -rf torch.egg-info
     pip install dist/*.whl
@@ -306,7 +258,8 @@ build_pytorch() {
       DEBUG=${DEBUG_MODE} \
       USE_ASAN=${ASAN_MODE} \
       USE_KINETO=${USE_KINETO} \
-      BUILD_TEST=0 python setup.py install
+      USE_NCCL=0 \
+      BUILD_TEST=0 python -m pip install --no-build-isolation -v -e .
     status=$?
   fi
   popd
@@ -332,6 +285,7 @@ build_torch_musa() {
   echo -e "\033[34mBuilding torch_musa...\033[0m"
   status=0
   pushd ${TORCH_MUSA_HOME}
+  pip install -r requirements.txt
   if [ $BUILD_WHEEL -eq 1 ]; then
     rm -rf dist
     TORCH_DEVICE_BACKEND_AUTOLOAD=0 \
@@ -340,7 +294,7 @@ build_torch_musa() {
       USE_ASAN=${ASAN_MODE} \
       ENABLE_COMPILE_FP64=${COMPILE_FP64}  \
       USE_MCCL=${USE_MCCL} \
-      USE_KINETO=${USE_KINETO} python setup.py bdist_wheel
+      USE_KINETO=${USE_KINETO} python -m pip wheel . --wheel-dir ./dist --no-build-isolation
     status=$?
     rm -rf torch_musa.egg-info
     pip install dist/*.whl
@@ -351,7 +305,7 @@ build_torch_musa() {
       USE_ASAN=${ASAN_MODE} \
       ENABLE_COMPILE_FP64=${COMPILE_FP64} \
       USE_MCCL=${USE_MCCL} \
-      USE_KINETO=${USE_KINETO} python setup.py install
+      USE_KINETO=${USE_KINETO} python -m pip install --no-build-isolation -v -e .
     status=$?
   fi
   if [ $status -ne 0 ]; then

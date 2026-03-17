@@ -1,24 +1,14 @@
 diff --git a/aten/src/ATen/native/native_functions.yaml b/aten/src/ATen/native/native_functions.yaml
-index c7533e4..8b8d119 100644
+index abb061a..6c54352 100644
 --- a/aten/src/ATen/native/native_functions.yaml
 +++ b/aten/src/ATen/native/native_functions.yaml
-@@ -15699,3 +15699,78 @@
+@@ -15940,3 +15940,68 @@
  # This op is ONLY used by pytorch/XLA in functionalization, and should never show up in vanilla eager mode or in any pytorch tracing contexts.
  - func: _propagate_xla_data(Tensor input, Tensor output) -> ()
    variants: function
 +
 +- func: gated_silu(Tensor input) -> Tensor
 +  variants: function
-+
-+- func: _fused_rmsnorm_forward(Tensor input, SymInt[] normalized_shape, float eps, Tensor? weight=None) -> (Tensor output, Tensor invvar)
-+  variants: function
-+  dispatch:
-+    CPU: _fused_rmsnorm_forward
-+
-+- func: _fused_rmsnorm_backward(Tensor grad_out, Tensor invvar, Tensor input, SymInt[] normalized_shape, float eps, Tensor? weight=None) -> (Tensor grad_input, Tensor grad_weight)
-+  variants: function
-+  dispatch:
-+    CPU: _fused_rmsnorm_backward
 +
 +- func: _scaled_dot_product_attention_math_musa(Tensor query, Tensor key, Tensor value, Tensor? attn_mask=None, float dropout_p=0.0, bool is_causal=False, *, float? scale=None) -> (Tensor output, Tensor attn_weights, Tensor dropout_mask)
 +  variants: function

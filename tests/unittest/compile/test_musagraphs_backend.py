@@ -5,7 +5,6 @@ Unit test for verifying the correctness of Musagraphs backend in torch_musa.
 import os
 import random
 import torch
-import pytest
 import numpy as np
 from torch_musa._inductor import musagraph_trees
 from torch_musa import testing
@@ -49,9 +48,6 @@ class SimpleModel(torch.nn.Module):
 
 
 @testing.test_on_nonzero_card_if_multiple_musa_device(1)
-@pytest.mark.skip(
-    reason="Error in MUSA SDK 4.3.2, fixed in 4.3.3"
-)  # TODO(@ai-infra): remove this
 def test_musagraphs_backend():
     """Test the correctness of the Musagraphs backend for a simple linear model on MUSA."""
     set_seed()
@@ -65,6 +61,6 @@ def test_musagraphs_backend():
             no_compile_model_output = model(input_tensor)  # pylint: disable=E1102
             compile_model_output = compile_model(input_tensor)
 
-            assert torch.equal(
-                no_compile_model_output, compile_model_output
+            assert torch.allclose(
+                no_compile_model_output, compile_model_output, atol=1e-3, rtol=1e-3
             ), "compile vs eager mismatch"

@@ -1,4 +1,4 @@
-# pylint: disable=useless-import-alias,unused-argument,attr-rgx,declare-non-slot,invalid-name,unused-variable,C0411,C0412,consider-using-in,missing-type-doc,C0200,C3001,W9008
+# pylint: disable=useless-import-alias,unused-argument,attr-rgx,declare-non-slot,invalid-name,unused-variable,C0411,C0412,consider-using-in,missing-type-doc,C0200,C3001,W9008,C0301,E1125,E1135
 
 """
 MUSA graph trees are a safety abstraction over MUSAGraphs, similar to make_graph_callables,
@@ -72,8 +72,9 @@ from typing import (
 
 import torch.fx
 from torch import Tensor
+from torch._dynamo.callback import CallbackTrigger
 from torch._dynamo.mutation_guard import GenerationTracker
-from torch._dynamo.utils import counters, preserve_rng_state
+from torch._dynamo.utils import counters, preserve_rng_state, dynamo_timed
 from torch._inductor.compile_fx import (
     align_inputs_from_check_idxs,
     copy_misaligned_inputs,
@@ -88,6 +89,7 @@ from torch.multiprocessing.reductions import StorageWeakRef
 from torch.storage import UntypedStorage
 from torch.utils import _pytree as pytree
 from torch.utils.weak import TensorWeakRef
+from torch.utils._ordered_set import OrderedSet
 import torch_musa
 from torch_musa._inductor.musagraph_utils import (
     check_for_mutation,
@@ -106,6 +108,7 @@ from torch_musa._inductor.musagraph_utils import (
 if TYPE_CHECKING:
     from torch._inductor.utils import InputType
     from torch.types import _bool
+    from torch._guards import CompileId
 
 StorageWeakRefPointer = int
 StorageDataPtr = int
@@ -127,7 +130,7 @@ else:
         pass
 
 
-log = torch._logging.getArtifactLogger(__name__, "musagraphs")
+log = torch._logging.getArtifactLogger("torch_inductor", "musagraphs")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -363,6 +366,17 @@ def get_manager(
     return get_container(device_index).tree_manager
 
 
+def is_musagraph_capture_sizes(int_key: Union[int, tuple[int, ...]]) -> bool:
+    """
+    Returns true if all dynamic shapes should be captured or the dynamic shape
+    int_key should be captured.
+    """
+    return (
+        config.triton.cudagraph_capture_sizes is None
+        or int_key in config.triton.cudagraph_capture_sizes
+    )
+
+
 def musagraphify_impl(
     model: ModelType,
     inputs: List[InputType],
@@ -406,6 +420,10 @@ def musagraphify_impl(
         nonlocal has_warn
 
         int_key = get_ints(inputs)
+
+        if not is_musagraph_capture_sizes(int_key):
+            return model(inputs)
+
         fn = fn_cache.get(int_key)
         if fn is not None:
             return fn(inputs)
@@ -424,24 +442,39 @@ def musagraphify_impl(
         new_static_input_idxs = remove_unaligned_input_idxs(inputs, static_input_idxs)
         copy_misaligned_inputs(inputs, check_input_idxs)
 
-        fn, out = musagraphify(
-            model,
-            inputs,
-            new_static_input_idxs,
-            device_index=kwargs.get("device_index", 0),
-            is_backward=kwargs.get("is_backward", False),
-            is_inference=kwargs.get("is_inference", False),
-            stack_traces=kwargs.get("stack_traces", None),
-            constants=kwargs.get("constants", ()),
-            placeholders=kwargs.get("placeholders", ()),
-            mutated_input_idxs=kwargs.get("mutated_input_idxs", ()),
+        fn, out = musagraphify(model, inputs, new_static_input_idxs, *args, **kwargs)
+        # musagraph will already clones input locally, no need to copy back
+        mutated_input_idxs: OrderedSet[int] = OrderedSet()
+        fn = align_inputs_from_check_idxs(
+            fn, inputs_to_check=check_input_idxs, mutated_input_idxs=mutated_input_idxs
         )
-        fn = align_inputs_from_check_idxs(fn, inputs_to_check=check_input_idxs)
         fn_cache[int_key] = fn
 
         return out
 
     return deferred_musagraphify
+
+
+@contextlib.contextmanager
+def dynamo_timed_musagraph(
+    name: str,
+    compile_id: Optional[CompileId],
+    mode: Optional[CompilationMode],
+) -> Generator[Any, None, None]:
+    """
+    Makes usages of dynamo_timed in this file less verbose. NOTE: This CM sums
+    all durations into a single column in the dynamo_compile table. Use only if
+    you consider the timed region to be part of the runtime overhead associated
+    with the compiler.
+    """
+    with dynamo_timed(
+        name,
+        log_pt2_compile_event=True,
+        compile_id=compile_id,
+        is_backward=mode == CompilationMode.BACKWARD,
+        dynamo_compile_column_us="runtime_cudagraphify_time_us",
+    ):
+        yield
 
 
 def musagraphify(
@@ -456,6 +489,7 @@ def musagraphify(
     constants: Tuple[torch.Tensor, ...] = (),
     placeholders: Tuple[PlaceholderInfo, ...] = (),
     mutated_input_idxs: Tuple[int, ...] = (),
+    compile_id: Optional[CompileId] = None,
 ) -> Tuple[ModelType, OutputType]:
     """
     Compile and add the given model and inputs to the MUSAGraph tree manager for execution.
@@ -480,18 +514,20 @@ def musagraphify(
         placeholders (Tuple[PlaceholderInfo, ...], optional): Placeholder metadata. Defaults to ().
         mutated_input_idxs (Tuple[int, ...], optional): Indices of inputs that may be mutated.
                                                         Defaults to ().
+        compile_id (Optional[CompileId]): compile idx of each graph in musagraphs
 
     Returns:
         Tuple[ModelType, OutputType]: A tuple of the compiled model callable and the output.
     """
-
-    manager = get_container(device_index).get_tree_manager()
     assert not (is_backward and is_inference)
     mode = (
         CompilationMode.BACKWARD
         if is_backward
         else (CompilationMode.INFERENCE if is_inference else CompilationMode.FORWARD)
     )
+
+    with dynamo_timed_musagraph("musagraphify.get_container", compile_id, mode):
+        manager = get_container(device_index).get_tree_manager()
 
     return manager.add_function(
         model,
@@ -502,6 +538,7 @@ def musagraphify(
         constants,
         placeholders,
         mutated_input_idxs,
+        compile_id,
     )
 
 
@@ -889,6 +926,8 @@ class MUSAGraphNode:
         device_index: int,
         stack_traces: Optional[StackTraces],
         stream: torch.musa.Stream,
+        mode: Optional[CompilationMode],
+        compile_id: Optional[CompileId],
     ) -> None:
         assert isinstance(inputs, (list, tuple))
 
@@ -943,8 +982,23 @@ class MUSAGraphNode:
             if isinstance(t, torch.Tensor) and self._is_musa_graph_recorded_tensor(t)
         ]
 
-        self.static_input_idxs: List[int] = list(
-            set(wrapped_function.static_input_idxs) | set(self.musagraph_managed_idxs)
+        # (depth, offset) of live tensors which are alias of previous graph outputs
+        self.live_musagraph_managed_path_refs: InputList[Optional[PathOutputIndex]] = [
+            (
+                self._is_alias_of_live_recorded_tensor(t)
+                if isinstance(t, torch.Tensor)
+                else None
+            )
+            for t in inputs
+        ]
+
+        # when replay, preserve the liveness of an input if it AliasesPriorGraphOutput
+        # and also aliases an output of the current CUDAGraphNode
+        self.preserved_aliased_inputs: InputList[bool] = [False] * len(inputs)
+
+        self.static_input_idxs: list[int] = list(
+            OrderedSet(wrapped_function.static_input_idxs)
+            | OrderedSet(self.musagraph_managed_idxs)
         )
 
         self.non_static_input_idx: LevelList[int] = [
@@ -963,8 +1017,8 @@ class MUSAGraphNode:
 
         def maybe_get_static_data_ptr(
             idx: int,
-            inputs: List[Union[torch.Tensor, int]],
-            static_input_idxs: List[int],
+            inputs: list[InputType],
+            static_input_idxs: list[int],
         ) -> Optional[int]:
             inp = inputs[idx]
             if isinstance(inp, torch.Tensor) and idx in static_input_idxs:
@@ -979,13 +1033,13 @@ class MUSAGraphNode:
         # When we checkpoint, and free generations, we will be manually freeing the outputs
         # of MUSAGraphNodes. We should not be freeing parameters, not do we need to account for
         # their liveness (they are static), so we need to compute which outputs are aliases of
-        # parameters. Some static inputs are saved tensors from the forward that die in the
-        # backward. Their locations are static but lifetimes are not. We only include the
-        # persistent static data ptrs below because the non persistent data ptrs may be outputs
-        # of this record and fresh allocations.
+        # parameters. Some static inputs are saved tensors from the forward that die in the backward.
+        # Their locations are static but lifetimes are not. We only include the persistent static
+        # data ptrs below because the non persistent data ptrs may be outputs of this record and
+        # fresh allocations.
 
         # precompute expanded dims to avoid computing in the hot path
-        self.expanded_dims: List[List[int]] = [
+        self.expanded_dims: list[list[int]] = [
             (
                 get_expanded_dims(x)
                 if isinstance(x, torch.Tensor) and idx not in self.static_input_idxs
@@ -1002,11 +1056,11 @@ class MUSAGraphNode:
         # List of Tuples of (depth, output_index) that index into node at depth
         # number of nodes from root and output_index of outputs. Will index into
         # path_weakrefs.
-        self.expected_dead_indices_before_graph: List[PathOutputIndex] = []
-        self.expected_dead_indices_after_graph: List[PathOutputIndex] = []
+        self.expected_dead_indices_before_graph: list[PathOutputIndex] = []
+        self.expected_dead_indices_after_graph: list[PathOutputIndex] = []
 
         # all live indices after graph recording
-        self.live_indices_after_graph: List[PathOutputIndex] = []
+        self.live_indices_after_graph: list[PathOutputIndex] = []
 
         if self.parent is not None:
             previous_liveness = self.parent.recorded_liveness_after_graph
@@ -1019,6 +1073,7 @@ class MUSAGraphNode:
             self.recorded_liveness_before_graph = curr_liveness
             self.expected_dead_indices_before_graph = different_indices
 
+        rng_states = [inp for inp in inputs if isinstance(inp, torch.Generator)]
         recording_inputs = self._allocate_and_copy_recording_inputs(inputs)
         # recording inputs will copy over memory, so we can free non recording inputs
         inputs.clear()
@@ -1027,13 +1082,18 @@ class MUSAGraphNode:
         # graph used for recording model invocation
         self.graph: Optional[torch.musa.MUSAGraph] = torch.musa.MUSAGraph()
 
-        # we allocate non-static inputs within the same memory pool as the MUSAGraph
+        # TODO: register_generator_state should potentially take explicit device
+        with torch.musa.device(self.device):
+            for rng_state in rng_states:
+                self.graph.register_generator_state(rng_state)
+
+        # we allocate non-static inputs within the same memory pool as the CUDAGraph
         # which we will record the model with. For memory efficiency, it is important
         # to reclaim the input memory when the inputs are no longer live. To accomplish this,
         # we reconstruct tensors at the correct data pointers of our inputs which are
         # non owning and do not prevent deallocation. On subsequent executions, input values
         # will be copied over to these tensors.
-        self.reconstructed_inputs: List[InputType] = [
+        self.reconstructed_inputs: list[InputType] = [
             (
                 self._reconstruct_from_tensor_metadata(self._tensor_metadata(x))
                 if isinstance(x, torch.Tensor)
@@ -1068,8 +1128,8 @@ class MUSAGraphNode:
         # check if the output tensor does not have an additional python reference.
         # If a descendent node discovers it has an alias of a prior output, then the output
         # will no longer be cached in the ancestor.
-        # The large majority of tensors are unaliased, and preserving aliased output tensors
-        # would add significant additional complexity with marginal gains
+        # The large majority of tensors are unaliased, and preserving aliased output tensors would add
+        # significant additional complexity with marginal gains
         # The cached tensor outputs are added on the first execution, and cleared whenever we need
         # to do subsequent recording
         self.unaliased_in_all_paths: OutputList[bool] = []
@@ -1081,14 +1141,15 @@ class MUSAGraphNode:
         self.static_output_tensors: OutputList[Optional[Tensor]] = []
 
         # Cleared after recording
-        self.recording_outputs: Optional[OutputType] = self._record(
-            wrapped_function.model, recording_inputs
-        )
-        self.outputs_metadata: OutputList[Union[Dict[str, Any], int, None]] = []
+        with dynamo_timed_musagraph("MUSAGraphNode.record", compile_id, mode):
+            self.recording_outputs: Optional[OutputType] = self._record(
+                wrapped_function.model, recording_inputs
+            )
+        self.outputs_metadata: OutputList[Union[dict[str, Any], int, None]] = []
 
-        # As with inputs, we do not want to keep the outputs permanently alive because that
-        # would prevent their memory being reclaimed in subsequent musa graph recordings.
-        # We record the tensor metadata needed to reconstruct instead.
+        # As with inputs, we do not want to keep the outputs permanently alive because that would prevent
+        # their memory being reclaimed in subsequent musa graph recordings. We record the tensor metadata
+        # needed to reconstruct instead.
         assert self.recording_outputs is not None
         for out in self.recording_outputs:
             if isinstance(out, torch.Tensor):
@@ -1233,11 +1294,11 @@ class MUSAGraphNode:
         self.check_static_inputs_are_stable(new_inputs)
 
         self._copy_inputs_and_remove_from_src(self.reconstructed_inputs, new_inputs)
-        new_inputs.clear()
 
         self.run_graph()
 
         outputs = self.reconstruct_outputs()
+        new_inputs.clear()
 
         if config.triton.fast_path_cudagraph_asserts:
             self.debug_check_invariants_after_invocation()
@@ -1495,6 +1556,12 @@ class MUSAGraphNode:
             path_ref = self._is_alias_of_live_recorded_tensor(o)
             if path_ref is not None:
                 self._mark_prior_graph_output_as_aliased(path_ref)
+
+                for idx, inp_path_ref in enumerate(
+                    self.live_musagraph_managed_path_refs
+                ):
+                    if path_ref == inp_path_ref:
+                        self.preserved_aliased_inputs[idx] = True
                 self.output_storage_alias.append(AliasesPriorGraphOutput(path_ref))
                 continue
 
@@ -2182,6 +2249,7 @@ class MUSAGraphTreeManager:
         self.debug_checkpointing_counter = 0
 
         self.id_to_mode: Dict[FunctionID, CompilationMode] = {}
+        self.id_to_compile_id: Dict[FunctionID, Optional[CompileId]] = {}
 
         # Note: [Backward Generation Handling]
         # We generally perform a sequence of forward executions followed by backward executions.
@@ -2198,6 +2266,15 @@ class MUSAGraphTreeManager:
         # mod2(mod1(x)).sum().backward()
 
         self.running_forwards_with_pending_backwards = False
+        self.mode: Optional[CompilationMode] = None
+
+        self.disable_invalidate_aliases = (
+            False
+            if not torch._environment.is_fbcode()
+            else torch._utils_internal.justknobs_check(
+                "torch_musa/inductor:disable_musagraph_alias_invalidation"
+            )
+        )
 
     def run(self, new_inputs: List[InputType], function_id: FunctionID) -> OutputType:
         """
@@ -2214,10 +2291,11 @@ class MUSAGraphTreeManager:
         """
 
         assert self.graph is not None, "Running MUSAGraph after shutdown"
+        mode = self.id_to_mode[function_id]
+        self.compile_id = self.id_to_compile_id[function_id]
         out = self._run(new_inputs, function_id)
 
         # The forwards are only pending following invocation, not before
-        mode = self.id_to_mode[function_id]
         if mode == CompilationMode.FORWARD:
             self.running_forwards_with_pending_backwards = True
         elif mode == CompilationMode.BACKWARD:
@@ -2227,6 +2305,7 @@ class MUSAGraphTreeManager:
 
     def set_to_running_backward(self) -> None:
         self.running_forwards_with_pending_backwards = False
+        self.mode = CompilationMode.BACKWARD
 
     def _get_musa_graph_recorded_tensor_checker(self) -> Callable[[Tensor], bool]:
         return (
@@ -2419,32 +2498,38 @@ class MUSAGraphTreeManager:
         """
 
         assert not isinstance(self.current_node, MUSAWarmupNode)
-        graph_id = self.new_graph_id()
-        log.debug(
-            "Recording function %d of graph recording id %d",
-            function_id.id,
-            graph_id.id,
-        )
-        torch.musa.synchronize()
-        node = MUSAGraphNode(
-            self.ids_to_funcs[function_id],
-            graph_id,
-            self.current_node,
-            new_inputs,
-            self.musa_graphs_thread_pool,
-            self.device_index,
-            self.ids_to_stack_traces[function_id],
-            self.stream,
-        )
-        if self.current_node is None:
-            self.roots[function_id].append(node)
-        else:
-            self.current_node.add_child(function_id, node)
-        self.current_node = node
-        self.path_state = ExecutionState.RECORDING
-        self.update_generation()
-        torch.musa.synchronize()
-        return node.run_first_inputs(new_inputs)
+        # (NOTE): We use CUDAGRAPH_RECORDING enum here
+        with torch._dynamo.callback_handler.install_callbacks(
+            CallbackTrigger.CUDAGRAPH_RECORDING, str(self.compile_id)
+        ):
+            graph_id = self.new_graph_id()
+            log.debug(
+                "Recording function %d of graph recording id %d",
+                function_id.id,
+                graph_id.id,
+            )
+            torch.musa.synchronize()
+            node = MUSAGraphNode(
+                self.ids_to_funcs[function_id],
+                graph_id,
+                self.current_node,
+                new_inputs,
+                self.musa_graphs_thread_pool,
+                self.device_index,
+                self.ids_to_stack_traces[function_id],
+                self.stream,
+                self.mode,
+                self.compile_id,
+            )
+            if self.current_node is None:
+                self.roots[function_id].append(node)
+            else:
+                self.current_node.add_child(function_id, node)
+            self.current_node = node
+            self.path_state = ExecutionState.RECORDING
+            self.update_generation()
+            torch.musa.synchronize()
+            return node.run_first_inputs(new_inputs)
 
     def execute_node(
         self, node: MUSAGraphNode, new_inputs: List[InputType]
@@ -2511,6 +2596,7 @@ class MUSAGraphTreeManager:
         constants: Tuple[torch.Tensor, ...],
         placeholders: Tuple[PlaceholderInfo, ...],
         mutated_input_idxs: Tuple[int, ...],
+        compile_id: Optional[CompileId],
     ) -> Tuple[
         ModelType,
         OutputType,
@@ -2527,6 +2613,7 @@ class MUSAGraphTreeManager:
             constants (Tuple[torch.Tensor, ...]): Constant tensors.
             placeholders (Tuple[PlaceholderInfo, ...]): Placeholder info for inputs.
             mutated_input_idxs (Tuple[int, ...]): Indices of mutated inputs.
+            compile_id (Optional[CompileId]): compile idx of different config of musagraphs
 
         Returns:
             Tuple[ModelType, OutputType]: The compiled model and its output.
@@ -2543,6 +2630,7 @@ class MUSAGraphTreeManager:
             mutated_input_idxs,
         )
         self.id_to_mode[new_func_id] = mode
+        self.id_to_compile_id[new_func_id] = compile_id
         fn = functools.partial(self.run, function_id=new_func_id)
 
         # container needs to set clean up when fn dies
@@ -2701,6 +2789,18 @@ class MUSAGraphTreeManager:
             "before each model invocation"
         )
 
+    @staticmethod
+    def format_dealloc_msg(stack_trace: Optional[str]) -> str:
+        stack_trace = (
+            stack_trace.strip() if stack_trace else "[Could not find stack trace]"
+        )
+        return (
+            "Error: accessing tensor output of CUDAGraphs that has been overwritten by a "
+            f"subsequent run. Stack trace: {stack_trace}. "
+            "To prevent overwriting, clone the tensor outside of torch.compile() "
+            "or call torch.compiler.musagraph_mark_step_begin() before each model invocation."
+        )
+
     def dealloc_current_path_weakrefs(self) -> None:
         """
         Deallocate and invalidate weak references to tensors along the current node's path.
@@ -2724,6 +2824,8 @@ class MUSAGraphTreeManager:
         assert self.current_node is not None
         # TODO: we could also allow the these weak refs to continue to be allocated,
         # but that adds some complications.
+
+        stor_stack_trace: dict[int, Optional[str]] = {}
         for node in self.current_node._path_from_root:
             assert node.stack_traces is not None
             assert len(node.tensor_weakrefs) == len(node.stack_traces)
@@ -2732,27 +2834,42 @@ class MUSAGraphTreeManager:
                 if ten is None:
                     continue
 
-                stack_trace = (
-                    stack_trace.strip()
-                    if stack_trace
-                    else "[Could not find stack trace]"
+                torch_musa._MUSAC._set_storage_access_error_msg(
+                    ten, self.format_dealloc_msg(stack_trace)
                 )
-                msg = (
-                    "Error: accessing tensor output of MUSAGraphs that has been overwritten by a \
-                    subsequent run. "
-                    f"Stack trace: {stack_trace}. "
-                    "To prevent overwriting, clone the tensor outside of torch.compile() "
-                    "or call torch.compiler.musagraph_mark_step_begin() \
-                    before each model invocation."
-                )
-                torch_musa._MUSAC._set_storage_access_error_msg(ten, msg)
 
-        deleted = set()
+            # we would to enable the following assertion, but an internal model failed with a command
+            # that does not repro. len(node.outputs_weakrefs) == len(node.stack_traces)
+            # so, pessimistically assume that they might differ by doing the debug info
+            # loop separately from the dealloc loop
+            if self.disable_invalidate_aliases:
+                continue
+
+            for storage_ref, stack_trace in zip(
+                node.outputs_weakrefs, node.stack_traces
+            ):
+                if not storage_ref:
+                    continue
+
+                stor_stack_trace[storage_ref.data_ptr()] = stack_trace
+
+        deleted = OrderedSet[Any]()
         for storage_ref in self.current_node.path_live_weakrefs():
             _storage_deref = storage_ref()
             if _storage_deref and storage_ref.data_ptr() not in deleted:
                 deleted.add(storage_ref.data_ptr())
+
+                msg = self.format_dealloc_msg(
+                    stor_stack_trace.get(storage_ref.data_ptr())
+                )
                 torch_musa._MUSAC._free_And_Remove_DeleterFn(_storage_deref)
+
+                if self.disable_invalidate_aliases:
+                    continue
+
+                torch_musa._MUSAC._set_storage_data_ptr_access_error_msg(
+                    _storage_deref, msg
+                )
 
     def clear_current_path_state_and_set_to_none(self) -> None:
         assert isinstance(self.current_node, MUSAGraphNode)

@@ -21,7 +21,7 @@ torchvision_block_pattern = (
     r"TORCH_LIBRARY_IMPL\(torchvision, PrivateUse1, m\) \{([\s\S]*?)\}"
 )
 
-impl_pattern = 'm\.impl\(\s*?TORCH_SELECTIVE_NAME\(\s*?"(.*?)"|m\.impl\(\s*?"(.*?)"'
+impl_pattern = r'm\.impl\(\s*?TORCH_SELECTIVE_NAME\(\s*?"(.*?)"|m\.impl\(\s*?"(.*?)"'
 
 # catch quantized ops
 quantized_ops = []

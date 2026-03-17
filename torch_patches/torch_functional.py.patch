@@ -1,12 +1,13 @@
 diff --git a/torch/functional.py b/torch/functional.py
-index 26bea98..7455851 100644
+index b5fcf82..5422d2f 100644
 --- a/torch/functional.py
 +++ b/torch/functional.py
-@@ -1809,7 +1809,6 @@ def norm(  # noqa: F811
-         "cpu",
+@@ -1772,7 +1772,7 @@ def norm(  # noqa: F811
          "cuda",
+         "xpu",
          "meta",
 -        torch.utils.backend_registration._privateuse1_backend_name,
++        # torch.utils.backend_registration._privateuse1_backend_name,
      ):
          if dim is not None:
              if isinstance(dim, (int, torch.SymInt)):

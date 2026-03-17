@@ -2,6 +2,7 @@
 #define TORCH_MUSA_CSRC_CORE_MUSAGRAPHSC10UTILS_H_
 
 #include <c10/musa/MUSAMacros.h>
+#include "torch_musa/csrc/aten/ops/musa/unimplemented_functions.h"
 #include "torch_musa/csrc/core/MUSAStream.h"
 
 #include <musa_runtime_api.h>

@@ -64,7 +64,7 @@ at::Tensor& DotOut(const at::Tensor& l, const at::Tensor& r, at::Tensor& out) {
   auto rmt = CreateMUTensor(contiguous_r);
 
   ::musa::dnn::Dot op;
-  op.SetComputeMode(at::musa::GetComputeModeFromCtx(l.scalar_type()));
+  op.SetComputeMode(at::musa::GetMatmulComputeModeFromCtx(l.scalar_type()));
   CHECK_MUDNN_STATUS(op.Run(h, rst, lmt, rmt, InternalMemAlloc), "Run")
 
   out.squeeze_();
@@ -282,9 +282,15 @@ void MmCall(
   Tensor contiguous_l;
   Tensor contiguous_r;
 
+  // muDNN don't support broadcast for mat1, we need to remove the broadcast:
+  Tensor l_alias = l.alias();
+  if (is_broadcasted_except_last_dim(l) && l.dim() == 2) {
+    l_alias = l.as_strided({1, l.size(-1)}, {l.size(-1), 1});
+  }
+
   // muDNN need origin mat shape info, so we need to transpose(-2, -1) here
-  auto lmt = trans_l ? CreateMUTensor(l.transpose(-2, -1))
-                     : CreateMUTensor(ContiguousRef(l, contiguous_l));
+  auto lmt = trans_l ? CreateMUTensor(l_alias.transpose(-2, -1))
+                     : CreateMUTensor(ContiguousRef(l_alias, contiguous_l));
   auto rmt = trans_r ? CreateMUTensor(r.transpose(-2, -1))
                      : CreateMUTensor(ContiguousRef(r, contiguous_r));
   auto out_contig = out.contiguous();
@@ -292,7 +298,8 @@ void MmCall(
 
   ::musa::dnn::MatMul mm;
   CHECK_MUDNN_STATUS(
-      mm.SetComputeMode(at::musa::GetComputeModeFromCtx(l.scalar_type())),
+      mm.SetComputeMode(
+          at::musa::GetMatmulComputeModeFromCtx(l_alias.scalar_type())),
       "SetComputeMode");
   CHECK_MUDNN_STATUS(mm.SetTranspose(trans_l, trans_r), "SetTranspose");
 
@@ -372,7 +379,8 @@ void BmmCall(
   // Run muDNN BMM with `c = alpha * a @ b + beta * c`
   ::musa::dnn::BatchMatMul bmm;
   CHECK_MUDNN_STATUS(
-      bmm.SetComputeMode(at::musa::GetComputeModeFromCtx(l.scalar_type())),
+      bmm.SetComputeMode(
+          at::musa::GetMatmulComputeModeFromCtx(l.scalar_type())),
       "SetComputeMode");
   CHECK_MUDNN_STATUS(bmm.SetTranspose(trans_l, trans_r), "SetTranspose");
   CHECK_MUDNN_STATUS(bmm.SetAlpha(alpha.to<double>()), "SetAlpha");
@@ -669,7 +677,8 @@ Tensor& ScaledMatmulOut(
 
   ::musa::dnn::BatchMatMul op;
   CHECK_MUDNN_STATUS(
-      op.SetComputeMode(at::musa::GetComputeModeFromCtx(mat1.scalar_type())),
+      op.SetComputeMode(
+          at::musa::GetMatmulComputeModeFromCtx(mat1.scalar_type())),
       "SetComputeMode");
   CHECK_MUDNN_STATUS(op.SetTranspose(trans_l, trans_r), "SetTranspose");
 

@@ -1,0 +1,98 @@
+diff --git a/torch/_inductor/compile_fx.py b/torch/_inductor/compile_fx.py
+index 9e466133004..c824df11740 100644
+--- a/torch/_inductor/compile_fx.py
++++ b/torch/_inductor/compile_fx.py
+@@ -1601,12 +1601,12 @@ class _InProcessFxCompile(FxCompile):
+ 
+                     # TODO: Hoist this above V.aot_compilation
+                     if cudagraphs and not V.graph.disable_cudagraphs_reason:
+-                        from torch._inductor.cudagraph_utils import (
+-                            check_lowering_disable_cudagraph,
+-                        )
++                        from torch_musa._inductor.musagraph_utils import (
++                            check_lowering_disable_musagraph,
++                         )
+ 
+                         V.graph.disable_cudagraphs_reason = (
+-                            check_lowering_disable_cudagraph(
++                            check_lowering_disable_musagraph(
+                                 V.graph.device_node_mapping
+                             )
+                         )
+@@ -1742,14 +1742,14 @@ def cudagraphify(
+     placeholders: Sequence[PlaceholderInfo] = (),
+     mutated_input_idxs: tuple[int, ...] = (),
+ ) -> Callable[..., Any]:
+-    from torch._inductor.cudagraph_trees import (
+-        cudagraphify_impl as new_cudagraphify_impl,
++    from torch_musa._inductor.musagraph_trees import (
++        musagraphify_impl as new_musagraphify_impl,
+     )
+ 
+     cudagraphify_fn: Callable[..., Any]
+     if config.triton.cudagraph_trees:
+         cudagraphify_fn = functools.partial(
+-            new_cudagraphify_impl,
++            new_musagraphify_impl,
+             device_index=device_index,
+             stack_traces=stack_traces,
+             is_backward=is_backward,
+@@ -1760,7 +1760,7 @@ def cudagraphify(
+             compile_id=torch._guards.CompileContext.current_compile_id(),
+         )
+     else:
+-        cudagraphify_fn = cudagraphify_impl
++        cudagraphify_fn = musagraphify_impl
+ 
+     compiled_fn = None
+ 
+@@ -1792,7 +1792,7 @@ def index_expanded_dims_and_copy_(
+     dst.copy_(src)
+ 
+ 
+-def cudagraphify_impl(
++def musagraphify_impl(
+     model: Callable[..., Any],
+     inputs: list[torch.Tensor],
+     static_input_idxs: Sequence[int] = (),
+@@ -1831,19 +1831,18 @@ def cudagraphify_impl(
+             index_expanded_dims_and_copy_(static_inputs[idx], x, expanded_dims)
+ 
+     # warmup
+-    torch.cuda.synchronize()
+-    stream = torch.cuda.Stream()
+-    stream.wait_stream(torch.cuda.current_stream())
++    torch.musa.synchronize()
++    stream = torch.musa.Stream()
++    stream.wait_stream(torch.musa.current_stream())
+     # copy static_inputs because it will be cleared in model
+-    with torch.cuda.stream(stream):
++    with torch.musa.stream(stream):
+         model(list(static_inputs))
+     stream.synchronize()
+-    torch.cuda.current_stream().wait_stream(stream)
+-    torch.cuda.synchronize()
+-
++    torch.musa.current_stream().wait_stream(stream)
++    torch.musa.synchronize()
+     # record
+-    graph = torch.cuda.CUDAGraph()
+-    with torch.cuda.graph(graph, stream=stream, capture_error_mode="thread_local"):
++    graph = torch.musa.MUSAGraph()
++    with torch.musa.graph(graph, stream=stream, capture_error_mode="thread_local"):
+         static_outputs = model(list(static_inputs))
+     if not isinstance(static_outputs, (list, tuple)):
+         static_outputs = (static_outputs,)
+@@ -2060,8 +2059,11 @@ def fw_compiler_freezing(
+ 
+ def get_cpp_wrapper_config() -> dict[str, object]:
+     if config.triton.cudagraphs:
++        from torch_musa._inductor.musagraph_utils import ( 
++            format_default_skip_message as format_default_skip_message_musa
++        )
+         log_cudagraph_skip_and_bump_counter(
+-            format_default_skip_message("cpp wrapper enabled")
++            format_default_skip_message_musa("cpp wrapper enabled")
+         )
+ 
+     return {

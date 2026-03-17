@@ -1,4 +1,4 @@
-Total amount of ops: 1233
+Total amount of ops: 1234
 - `__ilshift__.Scalar`
 - `__ilshift__.Tensor`
 - `__irshift__.Scalar`
@@ -212,8 +212,8 @@ Total amount of ops: 1233
 - `_fused_cross_entropy_loss_2d_backward`
 - `_fused_cross_entropy_loss_2d_forward`
 - `_fused_moving_avg_obs_fq_helper`
-- `_fused_rmsnorm_backward`
-- `_fused_rmsnorm_forward`
+- `_fused_rms_norm_backward`
+- `_fused_rms_norm`
 - `_fused_rope_backward`
 - `_fused_rope_forward`
 - `_fused_sdp_choice`
@@ -498,6 +498,7 @@ Total amount of ops: 1233
 - `cumsum.out`
 - `cumsum_`
 - `cumsum`
+- `dense_dim`
 - `dequantize.self`
 - `digamma.out`
 - `digamma_`

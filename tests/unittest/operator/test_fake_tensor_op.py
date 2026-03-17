@@ -35,8 +35,8 @@ class TestFakeTensorImpl:
             grad_out = torch.randn((2, 128, 4096), device=device)
             invvar = torch.randn((2, 128), device=device)
 
-            grad_input, grad_weight = torch.ops.aten._fused_rmsnorm_backward(
-                grad_out, invvar, inp, (4096,), 1e-6, weight
+            grad_input, grad_weight = torch.ops.aten._fused_rms_norm_backward(
+                grad_out, inp, (4096,), invvar, weight, [True, True]
             )
 
         self.assert_is_fake_tensor(grad_input)

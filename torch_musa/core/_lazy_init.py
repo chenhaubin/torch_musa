@@ -9,7 +9,7 @@ import torch
 import torch_musa
 
 from ._utils import _get_musa_device_index
-from .musa import *
+from .storage import *
 
 try:
     from torch_musa._MUSAC import _musart  # type: ignore[attr-defined]

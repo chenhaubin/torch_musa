@@ -151,7 +151,6 @@ Tensor Clamp(
       c10::TensorOptions(self.suggest_memory_format())
           .dtype(self.scalar_type()));
 
-  MUSA_TENSOR_TYPE_CHECK(self);
   ClampScalarCall(__func__, output, self, has_min, min, has_max, max);
 
   return output;
@@ -166,7 +165,6 @@ Tensor& Clamp_(
   TORCH_CHECK(
       has_min || has_max,
       "torch.clamp: either min, max or both scalars must be defined");
-  MUSA_TENSOR_TYPE_CHECK(self);
   const c10::musa::MUSAGuard device_guard(self.device());
   ClampScalarCall(__func__, self, self, has_min, min, has_max, max);
 
@@ -183,7 +181,6 @@ Tensor& ClampOut(
   TORCH_CHECK(
       has_min || has_max,
       "torch.clamp: either min, max or both scalars must be defined")
-  MUSA_TENSOR_TYPE_CHECK(self);
   const c10::musa::MUSAGuard device_guard(self.device());
 
   out.resize_as_(self);
@@ -197,7 +194,6 @@ Tensor& ClampOut(
 }
 
 Tensor ClampMin(const Tensor& self, const Scalar& min) {
-  MUSA_TENSOR_TYPE_CHECK(self);
   const c10::musa::MUSAGuard device_guard(self.device());
   Tensor output = at::empty_like(
       self,
@@ -215,7 +211,6 @@ Tensor ClampMin(const Tensor& self, const Scalar& min) {
 }
 
 Tensor& ClampMin_(Tensor& self, const Scalar& min) {
-  MUSA_TENSOR_TYPE_CHECK(self);
   const c10::musa::MUSAGuard device_guard(self.device());
   Tensor output = at::empty_like(
       self,
@@ -234,7 +229,6 @@ Tensor& ClampMin_(Tensor& self, const Scalar& min) {
 }
 
 Tensor& ClampMinOut(const Tensor& self, const Scalar& min, Tensor& out) {
-  MUSA_TENSOR_TYPE_CHECK(self);
   const c10::musa::MUSAGuard device_guard(self.device());
 
   out.resize_as_(self);
@@ -254,7 +248,6 @@ Tensor& ClampMinOut(const Tensor& self, const Scalar& min, Tensor& out) {
 }
 
 Tensor ClampMax(const Tensor& self, const Scalar& max) {
-  MUSA_TENSOR_TYPE_CHECK(self);
   const c10::musa::MUSAGuard device_guard(self.device());
   Tensor output = at::empty_like(
       self,
@@ -272,7 +265,6 @@ Tensor ClampMax(const Tensor& self, const Scalar& max) {
 }
 
 Tensor& ClampMax_(Tensor& self, const Scalar& max) {
-  MUSA_TENSOR_TYPE_CHECK(self);
   const c10::musa::MUSAGuard device_guard(self.device());
   Tensor output = at::empty_like(
       self,
@@ -291,7 +283,6 @@ Tensor& ClampMax_(Tensor& self, const Scalar& max) {
 }
 
 Tensor& ClampMaxOut(const Tensor& self, const Scalar& max, Tensor& out) {
-  MUSA_TENSOR_TYPE_CHECK(self);
   const c10::musa::MUSAGuard device_guard(self.device());
 
   out.resize_as_(self);
@@ -314,8 +305,6 @@ Tensor& ClampMaxTensorOut(
     const Tensor& self,
     const Tensor& max,
     Tensor& output) {
-  MUSA_TENSOR_TYPE_CHECK(self);
-  MUSA_TENSOR_TYPE_CHECK(max);
   c10::musa::MUSAGuard device_guard(self.device());
   // set output shape, must be consistent with self's sizes
   if (!output.sizes().equals(self.sizes())) {
@@ -331,8 +320,6 @@ Tensor& ClampMaxTensorOut(
 }
 
 Tensor ClampMaxTensor(const Tensor& self, const Tensor& max) {
-  MUSA_TENSOR_TYPE_CHECK(self);
-  MUSA_TENSOR_TYPE_CHECK(max);
   c10::musa::MUSAGuard device_guard(self.device());
   Tensor output = at::empty_like(
       self,
@@ -343,8 +330,6 @@ Tensor ClampMaxTensor(const Tensor& self, const Tensor& max) {
 }
 
 Tensor& ClampMaxTensor_(Tensor& self, const Tensor& max) {
-  MUSA_TENSOR_TYPE_CHECK(self);
-  MUSA_TENSOR_TYPE_CHECK(max);
   c10::musa::MUSAGuard device_guard(self.device());
   Tensor output = at::empty_like(
       self,
@@ -360,8 +345,6 @@ Tensor& ClampMinTensorOut(
     const Tensor& self,
     const Tensor& min,
     Tensor& output) {
-  MUSA_TENSOR_TYPE_CHECK(self);
-  MUSA_TENSOR_TYPE_CHECK(min);
   c10::musa::MUSAGuard device_guard(self.device());
   // set output shape, must be consistent with self's sizes
   if (!output.sizes().equals(self.sizes())) {
@@ -377,8 +360,6 @@ Tensor& ClampMinTensorOut(
 }
 
 Tensor ClampMinTensor(const Tensor& self, const Tensor& min) {
-  MUSA_TENSOR_TYPE_CHECK(self);
-  MUSA_TENSOR_TYPE_CHECK(min);
   c10::musa::MUSAGuard device_guard(self.device());
   Tensor output = at::empty_like(
       self,
@@ -389,8 +370,6 @@ Tensor ClampMinTensor(const Tensor& self, const Tensor& min) {
 }
 
 Tensor& ClampMinTensor_(Tensor& self, const Tensor& min) {
-  MUSA_TENSOR_TYPE_CHECK(self);
-  MUSA_TENSOR_TYPE_CHECK(min);
   c10::musa::MUSAGuard device_guard(self.device());
   Tensor output = at::empty_like(
       self,
@@ -408,7 +387,6 @@ Tensor& ClampTensorOut(
     const c10::optional<Tensor>& max,
     Tensor& output) {
   c10::musa::MUSAGuard device_guard(self.device());
-  MUSA_TENSOR_TYPE_CHECK(self);
   const auto self_device = self.device();
   const bool has_min = (min.has_value());
   const bool has_max = (max.has_value());
@@ -421,7 +399,6 @@ Tensor& ClampTensorOut(
         "Device of min tensor of ClampTensor must be the same as self, "
         "but now is ",
         min->device());
-    MUSA_TENSOR_TYPE_CHECK(min.value());
   }
   if (has_max) {
     TORCH_CHECK(
@@ -429,7 +406,6 @@ Tensor& ClampTensorOut(
         "Device of max tensor of ClampTensor must be the same as self, "
         "but now is ",
         max->device());
-    MUSA_TENSOR_TYPE_CHECK(max.value());
   }
   // set output shape, must be consistent with self's sizes
   if (!output.sizes().equals(self.sizes())) {

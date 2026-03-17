@@ -42,7 +42,7 @@ PORT_FILES = [
     PortingFile("aten/src/ATen/native/cuda", True, False),
     PortingFile("aten/src/ATen/native/nested", True, True),
     PortingFile("aten/src/ATen/native/quantized", True, True),
-    PortingFile("aten/src/ATen/native/sparse", True, True),
+    PortingFile("aten/src/ATen/native/sparse", True, False),
     PortingFile("aten/src/ATen/native/transformers", True, True),
     PortingFile("aten/src/ATen/cuda", True, False),
     PortingFile("aten/src/THC", True, True),
@@ -110,9 +110,9 @@ def port_cuda(
         "empty_cuda": "empty_musa",
         "cuda_cmake_macros": "musa_cmake_macros",
         "c10_cuda_check_implementation": "c10_musa_check_implementation",
-        "\.cuh>": ".muh>",
-        "cuda_dispatch\.h": "musa_dispatch.h",
-        "\.is_cuda[(][)]": ".is_privateuseone()",
+        r"\.cuh>": ".muh>",
+        r"cuda_dispatch\.h": "musa_dispatch.h",
+        r"\.is_cuda[(][)]": ".is_privateuseone()",
         "((?<!case )(?<!case c10::))DeviceType::CUDA": "DeviceType::PrivateUse1",
         "philox_cuda_state": "philox_musa_state",
         # TODO(caizhi): enable cub library porting
@@ -132,32 +132,36 @@ def port_cuda(
         "C10_CUDA_BUILD_MAIN_LIB": "C10_MUSA_BUILD_MAUN_LIB",
         "C10_CUDA_BUILD_SHARED_LIBS": "C10_MUSA_BUILD_SHARED_LIBS",
         "OptionalCUDAStreamGuard": "OptionalMUSAStreamGuard",
-        "<ATen/CUDAFunctions\.h>": "<ATen/MUSAFunctions.h>",
-        "<c10/musa/CUDADeviceAssertionHost\.h>": '"torch_musa/csrc/core/MUSADeviceAssertionHost.h"',
-        "<c10/musa/CUDAFunctions\.h>": '"torch_musa/csrc/core/MUSAFunctions.h"',
-        "<c10/musa/MUSAStream\.h>": '"torch_musa/csrc/core/MUSAStream.h"',
-        "<c10/musa/MUSAGuard\.h>": '"torch_musa/csrc/core/MUSAGuard.h"',
-        "<c10/musa/impl/CUDAGuardImpl\.h>": '"torch_musa/csrc/core/GuardImpl.h"',
-        "<c10/musa/CUDAException\.h>": '"torch_musa/csrc/core/MUSAException.h"',
-        "<c10/musa/CUDAMiscFunctions\.h>": '"torch_musa/csrc/core/MUSAMiscFunctions.h"',
-        "<c10/musa/CUDACachingAllocator\.h>": '"torch_musa/csrc/core/MUSACachingAllocator.h"',
-        "<c10/musa/MUSACachingAllocator\.h>": '"torch_musa/csrc/core/MUSACachingAllocator.h"',
-        "<c10/musa/CUDAGraphsC10Utils\.h>": '"torch_musa/csrc/core/MUSAGraphsC10Utils.h"',
-        "<ATen/musa/CUDADevice\.h>": '"torch_musa/csrc/core/Device.h"',
-        "<ATen/musa/CUDABlas\.h>": '"torch_musa/csrc/aten/musa/MUSABlas.h"',
-        "<ATen/musa/CUDAContext\.h>": '"torch_musa/csrc/aten/musa/MUSAContext.h"',
-        "<ATen/musa/CUDAContextLight\.h>": '"torch_musa/csrc/aten/musa/MUSAContextLight.h"',
-        "<ATen/musa/Exceptions\.h>": '"torch_musa/csrc/aten/musa/Exceptions.h"',
-        "<ATen/musa/PinnedMemoryAllocator\.h>": '"torch_musa/csrc/core/PinnedMemoryAllocator.h"',
-        "<ATen/musa/CachingHostAllocator\.h>": '"torch_musa/csrc/core/CachingHostAllocator.h"',
-        "<ATen/musa/MUSAGeneratorImpl\.h>": '"torch_musa/csrc/aten/musa/MUSAGeneratorImpl.h"',
-        "<ATen/musa/detail/PhiloxCudaStateRaw\.muh>": '"torch_musa/csrc/aten/musa/PhiloxMusaStateRaw.muh"',
-        "<ATen/musa/PhiloxMusaState\.h>": "<ATen/musa/PhiloxCudaState.h>",
-        "<ATen/musa/detail/UnpackRaw\.muh>": '"torch_musa/csrc/aten/musa/UnpackRaw.muh"',
-        "<ATen/musa/CUDAGraphsUtils\.muh>": '"torch_musa/csrc/aten/musa/MUSAGraphsUtils.muh"',
-        "Device\(kCUDA, current_device\(\)\)": "Device(kMUSA, current_device())",
-        "__syncthreads\(\)": "__SYNCTHREADS",  # check file before applying this
+        r"<ATen/CUDAFunctions\.h>": "<ATen/MUSAFunctions.h>",
+        r"<c10/musa/CUDADeviceAssertionHost\.h>": '"torch_musa/csrc/core/MUSADeviceAssertionHost.h"',
+        r"<c10/musa/CUDAFunctions\.h>": '"torch_musa/csrc/core/MUSAFunctions.h"',
+        r"<c10/musa/MUSAStream\.h>": '"torch_musa/csrc/core/MUSAStream.h"',
+        r"<c10/musa/MUSAGuard\.h>": '"torch_musa/csrc/core/MUSAGuard.h"',
+        r"<c10/musa/impl/CUDAGuardImpl\.h>": '"torch_musa/csrc/core/GuardImpl.h"',
+        r"<c10/musa/CUDAException\.h>": '"torch_musa/csrc/core/MUSAException.h"',
+        r"<c10/musa/CUDAMiscFunctions\.h>": '"torch_musa/csrc/core/MUSAMiscFunctions.h"',
+        r"<c10/musa/CUDACachingAllocator\.h>": '"torch_musa/csrc/core/MUSACachingAllocator.h"',
+        r"<c10/musa/MUSACachingAllocator\.h>": '"torch_musa/csrc/core/MUSACachingAllocator.h"',
+        r"<c10/musa/CUDAGraphsC10Utils\.h>": '"torch_musa/csrc/core/MUSAGraphsC10Utils.h"',
+        r"<ATen/musa/CUDADevice\.h>": '"torch_musa/csrc/core/Device.h"',
+        r"<ATen/musa/CUDABlas\.h>": '"torch_musa/csrc/aten/musa/MUSABlas.h"',
+        r"<ATen/musa/CUDAContext\.h>": '"torch_musa/csrc/aten/musa/MUSAContext.h"',
+        r"<ATen/musa/CUDAContextLight\.h>": '"torch_musa/csrc/aten/musa/MUSAContextLight.h"',
+        r"<ATen/musa/Exceptions\.h>": '"torch_musa/csrc/aten/musa/Exceptions.h"',
+        r"<ATen/musa/PinnedMemoryAllocator\.h>": '"torch_musa/csrc/core/PinnedMemoryAllocator.h"',
+        r"<ATen/musa/CachingHostAllocator\.h>": '"torch_musa/csrc/core/CachingHostAllocator.h"',
+        r"<ATen/musa/MUSAGeneratorImpl\.h>": '"torch_musa/csrc/aten/musa/MUSAGeneratorImpl.h"',
+        r"<ATen/musa/detail/PhiloxCudaStateRaw\.muh>": '"torch_musa/csrc/aten/musa/PhiloxMusaStateRaw.muh"',
+        r"<ATen/musa/PhiloxMusaState\.h>": "<ATen/musa/PhiloxCudaState.h>",
+        r"<ATen/musa/detail/UnpackRaw\.muh>": '"torch_musa/csrc/aten/musa/UnpackRaw.muh"',
+        r"<ATen/musa/CUDAGraphsUtils\.muh>": '"torch_musa/csrc/aten/musa/MUSAGraphsUtils.muh"',
+        r"Device\(kCUDA, current_device\(\)\)": "Device(kMUSA, current_device())",
+        r"__syncthreads\(\)": "__SYNCTHREADS",  # check file before applying this
         "impl::CUDAGuardImpl": "impl::MUSAGuardImpl",
+        r"<ATen/musa/CUDAGraphsUtils.muh>": "torch_musa/csrc/aten/musa/MUSAGraphsUtils.muh",
+        r"SparseCUDATensorMath.muh": "SparseMUSATensorMath.muh",
+        r"SparseCUDABlas.h": "SparseMUSABlas.h",
+        r"SparseCUDABlas.cpp": "SparseMUSABlas.cpp",
     }
 
     # unregister CUDA kernel bindings that managed by stub mechiasm,
@@ -166,15 +170,15 @@ def port_cuda(
     # the stub is binded to the correct kernel(the initialization order of static variables
     # can not be guaranteed).
     unregister_cuda_dispatch_stub_map = {
-        "REGISTER_DISPATCH\(index_stub, &index_kernel\);": "",
-        "REGISTER_DISPATCH\(index_put_stub, &index_put_kernel\);": "",
+        r"REGISTER_DISPATCH\(index_stub, &index_kernel\);": "",
+        r"REGISTER_DISPATCH\(index_put_stub, &index_put_kernel\);": "",
     }
     extra_replace_map.update(unregister_cuda_dispatch_stub_map)
 
     # Not all files' content should be replaced.
     # This only works on file level, substitution is consistent within the file
     excluded_files_mapping = {
-        "__syncthreads\(\)": (
+        r"__syncthreads\(\)": (
             "LossCTC.cu",
             "RreluWithNoise.cu",
             "DistributionTemplates.h",

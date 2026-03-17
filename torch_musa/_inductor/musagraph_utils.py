@@ -12,9 +12,9 @@ from torch._dynamo.utils import counters
 from torch._inductor.utils import InputType
 
 
-perf_hint_log = torch._logging.getArtifactLogger(__name__, "perf_hints")
+perf_hint_log = torch._logging.getArtifactLogger("torch_inductor", "perf_hints")
 static_inputs_log = torch._logging.getArtifactLogger(
-    __name__, "musagraph_static_inputs"
+    "torch_inductor", "musagraph_static_inputs"
 )
 
 

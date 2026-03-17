@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.19 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.27 FATAL_ERROR)
 
 project(Torch_MUSA CXX C)
 
@@ -122,7 +122,7 @@ torch_musa_parse_version_str(TORCH_MUSA ${TORCH_MUSA_DEFAULT_VERSION})
 set(TORCH_MUSA_SOVERSION
     "${TORCH_MUSA_VERSION_MAJOR}.${TORCH_MUSA_VERSION_MINOR}")
 
-set(TORCH_MUSA_PYTHON_MINIMUM_VERSION 3.9)
+set(TORCH_MUSA_PYTHON_MINIMUM_VERSION 3.10)
 
 # Set default build type
 if(NOT CMAKE_BUILD_TYPE)
@@ -320,7 +320,10 @@ include_directories(${GENERATED_PORTING_DIR}/aten/src)
 include_directories(${GENERATED_PORTING_DIR}/include/torch/csrc/api/include)
 include_directories(${CODE_GENERATED_DIR})
 
-# Set Python include dir, python version shoud be ge than 3.8
+# Set PyTorch 3rd party headers dir, included since torch2.9.0
+include_directories(${BUILD_PYTORCH_REPO_PATH}/third_party/nlohmann/include)
+
+# Set Python include dir, python version shoud be ge than 3.10
 find_package(Python3 ${TORCH_MUSA_PYTHON_MINIMUM_VERSION} REQUIRED
              COMPONENTS Development Interpreter)
 
@@ -374,6 +377,15 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/torch_musa/csrc)
 set(CPP_SRCS ${MUSA_CSRCS})
 add_library(${PLUGIN_NAME} SHARED ${CPP_SRCS})
 
+# add torch 3rd party library (static link)
+set(FORMAT_ROOT ${BUILD_PYTORCH_REPO_PATH}/third_party/fmt)
+add_library(fmt STATIC ${FORMAT_ROOT}/src/format.cc)
+target_include_directories(fmt PUBLIC ${FORMAT_ROOT}/include)
+set_target_properties(
+  fmt PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden
+                 VISIBILITY_INLINES_HIDDEN ON)
+target_compile_definitions(fmt PRIVATE FMT_SHARED=0)
+
 # keep consistent with PyTorch's ATen generating library, according to
 # Codegen.cmake
 if(USE_PER_OPERATOR_HEADERS)
@@ -402,6 +414,7 @@ set_source_files_properties(
 
 target_link_libraries(${PLUGIN_NAME} PUBLIC ${DEPENDENT_LIBRARIES})
 target_link_libraries(${PLUGIN_NAME} PUBLIC ${MUSA_KERNELS_LIB})
+target_link_libraries(${PLUGIN_NAME} PRIVATE fmt)
 
 if(LINUX)
   target_link_libraries(${PLUGIN_NAME} PRIVATE dl)

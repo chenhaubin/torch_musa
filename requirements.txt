@@ -1,12 +1,11 @@
 # Python dependencies required for development
-cmake==3.25.2
-cffi==1.15.1
-ninja==1.11.1
-openpyxl~=3.1.2
-setuptools>=60.2.0
-pyahocorasick==2.0.0
-scipy==1.10.1
-cmake_format==0.6.13
+setuptools>=70.1.0,<80.0
+cmake>=3.27.0
+cffi>=1.15.1
+ninja>=1.11.1
+numpy
+packaging
+cmake_format>=0.6.13
 pre-commit==3.5.0
 black==23.12.1
-packaging
+pyahocorasick

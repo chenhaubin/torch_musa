@@ -10,6 +10,8 @@
 // MUSIFY_EXCL_STOP
 namespace at {
 namespace musa {
+using ComplexFloat = c10::complex<float>;
+using ComplexDouble = c10::complex<double>;
 
 typedef __half float16_t;
 #if defined(__MUSACC__) && (__MUSA_ARCH__ >= 220 || !defined(__MUSA_ARCH__))
@@ -59,6 +61,8 @@ typedef int16_t bfloat16_t;
 SELF_VEC_DEF(float16_t, Half2, Half4)
 SELF_VEC_DEF(at::Half, ATHalf2, ATHalf4)
 SELF_VEC_DEF(at::BFloat16, ATBhalf2, ATBhalf4)
+SELF_VEC_DEF(ComplexFloat, ComplexFloat2, ComplexFloat4);
+SELF_VEC_DEF(ComplexDouble, ComplexDouble2, ComplexDouble4);
 #if defined(__MUSACC__) && (__MUSA_ARCH__ >= 220 || !defined(__MUSA_ARCH__))
 SELF_VEC_DEF(bfloat16_t, Bhalf2, Bhalf4)
 #endif
@@ -135,6 +139,8 @@ INST(uint16_t, ushort2, ushort4);
 INST(int64_t, long2, long4);
 INST(uint64_t, ulong2, ulong4);
 INST(double, double2, double4);
+INST(ComplexFloat, ComplexFloat2, ComplexFloat4);
+INST(ComplexDouble, ComplexDouble2, ComplexDouble4);
 
 #undef INST
 
@@ -327,6 +333,14 @@ DEF_VECT(double, double);
 DEF_VECT(double, double2);
 DEF_VECT(double, double3);
 DEF_VECT(double, double4);
+
+DEF_VECT(ComplexFloat, ComplexFloat);
+DEF_VECT(ComplexFloat, ComplexFloat2);
+DEF_VECT(ComplexFloat, ComplexFloat4);
+
+DEF_VECT(ComplexDouble, ComplexDouble);
+DEF_VECT(ComplexDouble, ComplexDouble2);
+DEF_VECT(ComplexDouble, ComplexDouble4);
 
 #undef DEF_VECT
 #undef MACRO_UNROLL
