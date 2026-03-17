@@ -16,6 +16,7 @@
   - [torchvision](#torchvision)
   - [torchaudio](#torchaudio)
   - [其他仓库](#其他仓库)
+- [故障排查](#故障排查)
 - [许可证](#许可证)
 
 <!-- tocstop -->
@@ -73,9 +74,11 @@ dist.init_process_group("mccl", rank=rank, world_size=world_size)
 - **[MUSA-SDK](https://developer.mthreads.com/sdk/download/musa?equipment=&os=&driverVersion=&version=)**，包括 MUSA Driver、musa_toolkit、muDNN 和 MCCL（仅 *S4000* 支持）；
 - **其他依赖库**，包括 [muThrust](https://github.com/MooreThreads/muThrust) 和 [muAlg](https://github.com/MooreThreads/muAlg)。
 
+运行 `musaInfo` 来检查 MUSA 环境是否配置正确；如果输出的是错误日志而不是设备信息，请参考下方的 [故障排查](#故障排查)。
+
 ### Docker 镜像
 
-我们在 [mcconline](https://mcconline.mthreads.com/repo) 上提供了若干已经发布的 Docker 镜像。
+我们在 [mcconline](https://mcconline.mthreads.com/repo) 上提供了若干已经发布的 Docker 镜像，并鼓励开发者在 Docker 环境中使用 torch_musa。
 
 使用 `docker pull` 拉取镜像后，可以通过如下命令创建容器并进入：
 
@@ -158,12 +161,6 @@ cd vision && python setup.py install
 
 其中 `version` 取决于你使用的 torch 版本，例如当 torch 版本为 v2.5.0 时，`${version}` 应为 `0.20.0`。
 
-如果在构建过程中出现无法找到 NVCC、CUDA 等相关错误，通常可以在 `setup.py` 顶部添加如下代码来解决：
-
-```python
-import torch_musa
-```
-
 ### torchaudio
 
 请从 [torch 官方 audio 仓库](https://github.com/pytorch/audio) 安装 torchaudio：
@@ -175,8 +172,6 @@ cd audio && python setup.py install
 
 其中 `version` 与 torch 版本保持一致。
 
-与 torchvision 类似，某些情况下也可能需要在 `setup.py` 开头添加一行 ```import torch_musa``` 才能正常使用。
-
 ### 其他仓库
 
 已经有许多仓库在上游支持了 MUSA 后端，
@@ -185,16 +180,48 @@ cd audio && python setup.py install
 
 对于暂未支持 MUSA 的仓库，我们在 [MooreThreads GitHub](https://github.com/MooreThreads) 下提供了经过 MUSA 适配的版本，部分列表如下：
 
-| 仓库 | 分支 | 链接 | 构建命令 |
-| :-- | :-: | :-: | :-: |
-| pytorch3d | musa-dev | https://github.com/MooreThreads/pytorch3d | python setup.py install |
-| pytorch_sparse | master | https://github.com/MooreThreads/pytorch_sparse | python setup.py install |
-| pytorch_scatter | master | https://github.com/MooreThreads/pytorch_scatter | python setup.py install |
-| torchvision | v0.22.1-musa | https://github.com/MooreThreads/vision | python setup.py install |
-| pytorch_lightning | musa-dev | https://github.com/MooreThreads/pytorch-lightning | python setup.py install |
+| 仓库 | 分支 | 链接 |
+| :-- | :-: | :-: |
+| pytorch3d | musa-dev | https://github.com/MooreThreads/pytorch3d |
+| pytorch_sparse | master | https://github.com/MooreThreads/pytorch_sparse |
+| pytorch_scatter | master | https://github.com/MooreThreads/pytorch_scatter |
+| pytorch_cluster | musa-dev | https://github.com/MooreThreads/pytorch_cluster |
+| torchvision | v0.22.1-musa | https://github.com/MooreThreads/vision |
+| pytorch_lightning | musa-dev | https://github.com/MooreThreads/pytorch-lightning |
+
+这些仓库可以通过`python setup.py install`或者`pip install . --no-build-isolation`来构建或者安装。
 
 如果用户在使用这些仓库时遇到任何问题，请在 torch_musa 仓库中提交 issue。
 如果你自行完成了某个仓库的 MUSA 适配，也欢迎通过 Pull Request 的方式贡献，帮助我们完善与扩展这份列表。
+
+## 故障排查
+
+- **`torch.musa.is_available()` 返回 False**
+  - **可能原因**：MUSA 驱动/运行时未正确安装或未正确加载，或当前环境未能找到所需的动态库。
+  - **建议处理**：确认已安装并可用 [MUSA-SDK](https://developer.mthreads.com/sdk/download/musa?equipment=&os=&driverVersion=&version=)，并检查 `MUSA_HOME` 与 `LD_LIBRARY_PATH`（或容器内对应路径）是否包含 `musa_toolkit`/`muDNN` 等库目录。
+
+- **导入失败：`ImportError: libmusa...so: cannot open shared object file` / 缺少 `libmudnn.so` / `libmccl.so`**
+  - **可能原因**：动态库搜索路径未配置，或 wheel/安装包与系统库版本不匹配。
+  - **建议处理**：在终端中配置（示例）：
+    - `export MUSA_HOME=/usr/local/musa`
+    - `export LD_LIBRARY_PATH=$MUSA_HOME/lib:$LD_LIBRARY_PATH`
+    并确认驱动/工具链版本与当前 torch_musa 版本兼容。
+
+- **导入失败：`ImportError: libmkl...so: cannot open shared object file` / 缺少 `libmkl.so`**
+  - **可能原因**：PyTorch 依赖 `libmkl.so`，你可能在使用启用了 MKL 的预编译 wheel。
+  - **建议处理**：卸载当前 torch，并从源码重新构建（运行 `bash build.sh -t`）。
+
+- **分布式初始化失败：`dist.init_process_group("mccl", ...)` 提示 backend 不可用/找不到**
+  - **可能原因**：未安装 MCCL，或当前架构不支持。
+  - **建议处理**：确认已安装 MCCL（*仅 S4000*）。对于不支持 MCCL 的架构（如 **S80/S3000**），按需使用 `USE_MCCL=0` 进行构建，并改用你环境中可用的分布式后端。
+
+- **从源码构建时 PyTorch 下载到了仓库外 / 构建位置不符合预期**
+  - **可能原因**：未设置 `PYTORCH_REPO_PATH`。
+  - **建议处理**：在构建前设置 `export PYTORCH_REPO_PATH=/path/to/PyTorch`（见上文“从源码构建”）。
+
+- **容器中看不到设备 / 运行时报 “no device” 或类似错误**
+  - **可能原因**：容器未正确挂载设备节点，或未正确配置设备可见性。
+  - **建议处理**：使用本文档中的示例参数启动容器，并确认设置 `MTHREADS_VISIBLE_DEVICES=all`（或指定设备 ID 列表）。
 
 ## 许可证
 

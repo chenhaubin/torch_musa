@@ -16,6 +16,7 @@
   - [torchvision](#torchvision)
   - [torchaudio](#torchaudio)
   - [Other Repositories](#other-repositories)
+- [Trouble Shooting](#trouble-shooting)
 - [License](#license)
 
 <!-- tocstop -->
@@ -61,15 +62,9 @@ import torch.distributed as dist
 dist.init_process_group("mccl", rank=rank, world_size=world_size)
 ```
 
-## Installation
-### Prerequisites
-Before installing torch_musa, here are some software packages that need to be installed on your machine first:
-- (For Docker users) **[KUAE Cloud Native Toolkits](https://developer.mthreads.com/sdk/download/CloudNative?equipment=&os=&driverVersion=&version=)**, including Container-Toolkit, MTML, sGPU;
-- **[MUSA-SDK](https://developer.mthreads.com/sdk/download/musa?equipment=&os=&driverVersion=&version=)**, including MUSA Driver, musa_toolkit, muDNN and MCCL(*S4000 only*);
-- **Other libraries**, including [muThrust](https://github.com/MooreThreads/muThrust) and [muAlg](https://github.com/MooreThreads/muAlg)
-
 ### Docker Image
-We provide several released docker images and they can be easily found in [mcconline](https://mcconline.mthreads.com/repo).
+We provide several released docker images and they can be easily found in [mcconline](https://mcconline.mthreads.com/repo),
+and encourage developers to utilize torch_musa within docker environment.
 
 Pull the docker image with `docker pull`, create a container with command below and there you go.
 ```bash
@@ -81,21 +76,33 @@ docker run -it --privileged \
 ```
 During its initial startup, it performs a self-check, so you can see the MUSA environment is ready or not.
 
+
+## Installation
+### Prerequisites
+Before installing torch_musa, here are some software packages that need to be installed on your machine first:
+- **[MUSA-SDK](https://developer.mthreads.com/sdk/download/musa?equipment=&os=&driverVersion=&version=)**, including MUSA Driver, musa_toolkit, muDNN and MCCL(*S4000 only*);
+- **Math-Libs**, including [muThrust](https://github.com/MooreThreads/muThrust) and [muAlg](https://github.com/MooreThreads/muAlg);
+- (For Docker users) **[KUAE Cloud Native Toolkits](https://developer.mthreads.com/sdk/download/CloudNative?equipment=&os=&driverVersion=&version=)**, including Container-Toolkit, MTML, sGPU;
+
+ Run `musaInfo` to check if the MUSA environment is set correctly, if it outputs error log instead of device information, refer to [Trouble Shotting](#trouble-shooting).
+
 ### From Python wheels
 Download torch & torch_musa wheels from our [Release Page](https://github.com/MooreThreads/torch_musa/releases),
 please make sure you have all prerequisites installed.
 
 ### From Source
-Firstly, clone the torch_musa repository
+Firstly, clone the torch_musa repository:
 ```bash
 git clone https://github.com/MooreThreads/torch_musa.git
 cd torch_musa
 ```
 
-then, we need to set `MUSA_HOME`, `LD_LIBRARY_PATH` and `PYTORCH_REPO_PATH` for building torch_musa:
+then, we need to set `MUSA_HOME`, `PATH`, `LD_LIBRARY_PATH` and `PYTORCH_REPO_PATH` for building torch_musa:
 ```bash
-export MUSA_HOME=path/to/musa_libraries(including mudnn and musa_toolkits) # defalut value is /usr/local/musa/
+export MUSA_HOME=path/to/musa/install/path  # defalut value is /usr/local/musa/
 export LD_LIBRARY_PATH=$MUSA_HOME/lib:$LD_LIBRARY_PATH
+export PATH=$MUSA_HOME/bin:$PATH
+
 # if PYTORCH_REPO_PATH is not set, PyTorch will be downloaded outside this directory when building with build.sh
 export PYTORCH_REPO_PATH=/path/to/PyTorch
 ```
@@ -137,10 +144,6 @@ git clone https://github.com/pytorch/vision -b ${version} --depth 1
 cd vision && python setup.py install
 ```
 the `version` depends on torch version, for example you have torch v2.5.0, `${version}` should be `0.20.0`.
-If the build fails due to errors on no NVCC, CUDA, etc. found, it can likely be fixed by adding this line to the top of setup.py:
-```python
-import torch_musa
-```
 
 ### torchaudio
 Install torchaudio from [torch source](https://github.com/pytorch/audio):
@@ -149,7 +152,6 @@ git clone https://github.com/pytorch/audio.git -b release/${version} --depth 1
 cd audio && python setup.py install
 ```
 the `version` is same as the torch version.
-Similar to torchvision, there is the possiblity that ```import torch_musa``` has to be added to the start of setup.py to use it. 
 
 ### Other Repositories
 Many repositories have supported MUSA backend upstream,
@@ -157,16 +159,48 @@ like [Transformers](https://github.com/huggingface/transformers.git), [Accelerat
 you can install them from PyPi with `pip install [repo-name]`.
 
 For others that haven't supported musa, we musified them and put into our [GitHub](https://github.com/MooreThreads), here's the list:
-| Repo | Branch | Link |  Build command |
-| :-- | :-: | :-: | :-: |
-| pytorch3d | musa-dev | https://github.com/MooreThreads/pytorch3d | python setup.py install |
-| pytorch_sparse | master | https://github.com/MooreThreads/pytorch_sparse | python setup.py install |
-| pytorch_scatter | master | https://github.com/MooreThreads/pytorch_scatter | python setup.py install |
-| torchvision | v0.22.1-musa | https://github.com/MooreThreads/vision | python setup.py install |
-| pytorch_lightning | musa-dev | https://github.com/MooreThreads/pytorch-lightning | python setup.py install |
+| Repo | Branch | Link |
+| :-- | :-: | :-: |
+| pytorch3d | musa-dev | https://github.com/MooreThreads/pytorch3d |
+| pytorch_sparse | master | https://github.com/MooreThreads/pytorch_sparse |
+| pytorch_scatter | master | https://github.com/MooreThreads/pytorch_scatter |
+| pytorch_cluster | musa-dev | https://github.com/MooreThreads/pytorch_cluster |
+| torchvision | v0.22.1-musa | https://github.com/MooreThreads/vision |
+| pytorch_lightning | musa-dev | https://github.com/MooreThreads/pytorch-lightning |
+
+Each repository can be built and install via `python setup.py install` or `pip install . --no-build-isolation`.
 
 If users find any question about these repos, please file issues in torch_musa, and if anyone  musify a repository, you can
 submit a Pull Request that helping us to expand this list.
+
+## Trouble Shooting
+
+- **`torch.musa.is_available()` returns False**
+  - **Possible cause**: MUSA driver/runtime is not installed or not loaded correctly, or required shared libraries are not found in the current environment.
+  - **Suggested fix**: Make sure [MUSA-SDK](https://developer.mthreads.com/sdk/download/musa?equipment=&os=&driverVersion=&version=) is installed and available, and check that `MUSA_HOME` and `LD_LIBRARY_PATH` (or corresponding paths inside your container) include directories for `musa_toolkit`/`muDNN`, etc.
+
+- **Import error: `ImportError: libmusa...so: cannot open shared object file` / missing `libmudnn.so` / `libmccl.so`**
+  - **Possible cause**: Shared library search path is not configured, or the wheel/package does not match the system libraries.
+  - **Suggested fix**: Configure (example):
+    - `export MUSA_HOME=/usr/local/musa`
+    - `export LD_LIBRARY_PATH=$MUSA_HOME/lib:$LD_LIBRARY_PATH`
+    and ensure your driver/toolchain versions are compatible with the torch_musa version you are using.
+
+- **Import error: `ImportError: libmkl...so: cannot open shared object file` / missing `libmkl.so`**
+  - **Possible cause**: `libmkl.so` is needed from pytorch, and you could be using pre-built wheel with MKL installed.
+  - **Suggeseted fix**: Uninstall torch, and rebuild it from source (run `bash build.sh -t`).
+
+- **Distributed init fails: `dist.init_process_group("mccl", ...)` (backend not available / not found)**
+  - **Possible cause**: MCCL is not installed, or the current architecture does not support it.
+  - **Suggested fix**: Make sure MCCL is installed (*S4000 only*). On architectures without MCCL (e.g. **S80/S3000**), build with `USE_MCCL=0` when needed and use a backend that is available in your environment.
+
+- **When building from source, PyTorch is downloaded outside the repo / unexpected build location**
+  - **Possible cause**: `PYTORCH_REPO_PATH` is not set.
+  - **Suggested fix**: Set `export PYTORCH_REPO_PATH=/path/to/PyTorch` before building (see “From Source” above).
+
+- **No device visible inside container / “no device” (or similar) at runtime**
+  - **Possible cause**: Device nodes are not passed into the container, or device visibility is not configured.
+  - **Suggested fix**: Start the container using the example flags in this README, and ensure `MTHREADS_VISIBLE_DEVICES=all` (or a specific device ID list) is set.
 
 ## License
 torch_musa has a BSD-style license, as found in the [LICENSE](LICENSE) file.
